@@ -4,7 +4,7 @@
 moore.instance "b1" @doesNotExist() -> ()
 
 // -----
-// expected-error @below {{must reference a 'moore.module', but @Foo is a 'func.func'}}
+// expected-error @below {{must reference a 'moore.module' or 'moore.module.extern', but @Foo is a 'func.func'}}
 moore.instance "foo" @Foo() -> ()
 func.func @Foo() { return }
 
@@ -307,3 +307,71 @@ moore.struct_extract_ref %0, "a" : net<struct<{a: i32}>> -> ref<i32>
 %0 = unrealized_conversion_cast to !moore.net<union<{a: i32}>>
 // expected-error @below {{failed to verify that all of {input, result} have same wrapper kind (ref or net)}}
 moore.union_extract_ref %0, "a" : net<union<{a: i32}>> -> ref<i32>
+
+// -----
+
+%0 = moore.constant 0 : i8
+// expected-error @below {{has 0 results, but target module @OneInOneOut has 1 outputs}}
+moore.instance "u" @OneInOneOut(a: %0: !moore.i8) -> ()
+moore.module.extern @OneInOneOut(in %a : !moore.i8, out b : !moore.i8)
+
+// -----
+
+// expected-error @below {{has the same name as a previous parameter}}
+moore.module.extern @DupParam<W: si32, W: si32>()
+
+// -----
+
+// expected-error @below {{should have a typed value; has value [1, 2]}}
+moore.module.extern @ParamTypeMismatch<W: si32 = [1, 2]>()
+
+// -----
+
+// expected-error @below {{cannot be used as a default value for a parameter}}
+moore.module.extern @RefDefault<A: si32 = 4, B: si32 = #hw.param.decl.ref<"A">>()
+
+// -----
+
+// expected-error @below {{cannot pass parameters to non-extern module @Plain}}
+moore.instance "u" @Plain<W: si32 = 8>() -> ()
+moore.module @Plain() {}
+
+// -----
+
+// expected-error @below {{expected 1 parameters but had 0}}
+moore.instance "u" @ParamExt() -> ()
+// expected-note @below {{module declared here}}
+moore.module.extern @ParamExt<W: si32>()
+
+// -----
+
+// expected-error @below {{parameter #0 should have name "W" but has name "X"}}
+moore.instance "u" @ParamExt<X: si32 = 8>() -> ()
+// expected-note @below {{module declared here}}
+moore.module.extern @ParamExt<W: si32>()
+
+// -----
+
+// expected-error @below {{parameter "W" should have type 'si32' but has type 'ui32'}}
+moore.instance "u" @ParamExt<W: ui32 = 8>() -> ()
+// expected-note @below {{module declared here}}
+moore.module.extern @ParamExt<W: si32>()
+
+// -----
+
+// expected-error @below {{parameter "W" must have a value}}
+moore.instance "u" @ParamExt<W: si32>() -> ()
+moore.module.extern @ParamExt<W: si32>()
+
+// -----
+
+%0 = moore.constant 0 : i8
+// expected-error @below {{operand 0 ('!moore.i8') does not match input type ('!moore.l4') of module @ExtMismatch}}
+moore.instance "u" @ExtMismatch(a: %0: !moore.i8) -> ()
+moore.module.extern @ExtMismatch(in %a : !moore.l4)
+
+// -----
+
+// expected-error @below {{use of unknown parameter "UNKNOWN"}}
+moore.instance "u" @ParamExt<W: si32 = #hw.param.decl.ref<"UNKNOWN">>() -> ()
+moore.module.extern @ParamExt<W: si32>()

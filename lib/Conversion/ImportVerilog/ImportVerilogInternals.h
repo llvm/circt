@@ -111,7 +111,9 @@ struct VirtualInterfaceMemberAccess {
 
 /// Module lowering information.
 struct ModuleLowering {
-  moore::SVModuleOp op;
+  Operation *op = nullptr;
+  hw::ModuleType moduleType;
+  ArrayAttr instanceParams;
   SmallVector<PortLowering> ports;
   SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
@@ -248,6 +250,9 @@ struct Context {
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation();
+  /// Return true if `module` should be imported as a `moore.module.extern`
+  /// declaration rather than a full `moore.module` with a lowered body.
+  bool shouldImportAsExtern(const slang::ast::InstanceBodySymbol &module) const;
   /// Convert a module and its ports to an empty module op in the IR. Also adds
   /// the op to the worklist of module bodies to be lowered. This acts like a
   /// module "declaration", allowing instances to already refer to a module even

@@ -139,6 +139,8 @@ struct InstBodyVisitor
       Context &context, const slang::ast::InstanceSymbol &symbol,
       DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
     const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
+    if (context.shouldImportAsExtern(*body))
+      return;
     if (visitedBodies.insert(body).second) {
       for (auto &member : body->members()) {
         auto &outermostModule = member.getParentScope()->asSymbol();

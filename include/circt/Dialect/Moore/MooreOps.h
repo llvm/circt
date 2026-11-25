@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_MOORE_MOOREOPS_H
 #define CIRCT_DIALECT_MOORE_MOOREOPS_H
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Dialect/Moore/MooreDialect.h"

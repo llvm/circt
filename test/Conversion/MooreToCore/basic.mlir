@@ -2594,3 +2594,18 @@ moore.module @TypedInstanceWithAttrs(in %a : !moore.l1, out y : !moore.l1) {
   %y = moore.instance "u0" @TypedChild(in: %a: !moore.l1) -> (out: !moore.l1) {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
   moore.output %y : !moore.l1
 }
+
+// CHECK-LABEL: hw.module.extern @PublicExtern(in %d : i8, out q : i8)
+moore.module.extern @PublicExtern(in %d : !moore.l8, out q : !moore.l8)
+
+// CHECK-LABEL: hw.module.extern private @ParamExtern<W: si32, MASK: ui8, MODE: none, T: none>(in %addr : i4, out rdata : i8) attributes {sv.attributes = [#sv.attribute<"blackbox">], verilogName = "orig_sram"}
+moore.module.extern private @ParamExtern<W: si32, MASK: ui8, MODE: none, T: none>(in %addr : !moore.l4, out rdata : !moore.l8) attributes {sv.attributes = [#sv.attribute<"blackbox">], verilogName = "orig_sram"}
+
+// CHECK-LABEL: hw.module @ExternInstantiation(in %a : i4, in %d : i8, out y0 : i8, out y1 : i8)
+moore.module @ExternInstantiation(in %a : !moore.l4, in %d : !moore.l8, out y0 : !moore.l8, out y1 : !moore.l8) {
+  // CHECK: %[[U0_Q:.*]] = hw.instance "u0" @PublicExtern(d: %d: i8) -> (q: i8)
+  %0 = moore.instance "u0" @PublicExtern(d: %d: !moore.l8) -> (q: !moore.l8)
+  // CHECK: %[[U1_RDATA:.*]] = hw.instance "u1" @ParamExtern<W: si32 = 16, MASK: ui8 = 255, MODE: none = "fast", T: none = #hw.param.verbatim<"logic[7:0]">>(addr: %a: i4) -> (rdata: i8) {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+  %1 = moore.instance "u1" @ParamExtern<W: si32 = 16, MASK: ui8 = 255, MODE: none = "fast", T: none = #hw.param.verbatim<"logic[7:0]">>(addr: %a: !moore.l4) -> (rdata: !moore.l8) {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+  moore.output %0, %1 : !moore.l8, !moore.l8
+}

@@ -144,6 +144,12 @@ struct CLOptions {
       cl::desc("Interpret `always @(*)` as `always_comb`"), cl::init(true),
       cl::cat(cat)};
 
+  cl::opt<bool> externalizeBlackboxes{
+      "externalize-blackboxes",
+      cl::desc("Import `(* blackbox *)` modules as `moore.module.extern` "
+               "declarations without lowering their bodies"),
+      cl::init(false), cl::cat(cat)};
+
   cl::opt<bool> detectMemories{
       "detect-memories",
       cl::desc("Detect memories and lower them to `seq.firmem`"),
@@ -362,6 +368,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.mode = ImportVerilogOptions::Mode::OnlyImport;
   options.debugInfo = opts.debugInfo;
   options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
+  options.externalizeBlackboxes = opts.externalizeBlackboxes;
 
   options.includeDirs = opts.includeDirs;
   options.includeSystemDirs = opts.includeSystemDirs;

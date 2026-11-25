@@ -7,11 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/FVInt.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/symbols/AttributeSymbol.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
+#include "slang/ast/symbols/ParameterSymbols.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxKind.h"
 #include "slang/syntax/SyntaxVisitor.h"
@@ -22,6 +25,98 @@ using namespace circt;
 using namespace ImportVerilog;
 
 static constexpr StringLiteral dpiExportAttrName = "circt.dpi.export";
+
+/// Return true if a `(* blackbox ... *)` attribute is enabled.
+static bool
+isBlackboxAttributeEnabled(const slang::ast::AttributeSymbol &attr) {
+  if (const auto *syntax = attr.getSyntax()) {
+    const auto &spec = syntax->as<slang::syntax::AttributeSpecSyntax>();
+    if (!spec.value)
+      return true;
+    if (spec.value->expr->kind ==
+        slang::syntax::SyntaxKind::StringLiteralExpression) {
+      std::string_view raw =
+          spec.value->expr->as<slang::syntax::LiteralExpressionSyntax>()
+              .literal.rawText();
+      return raw != "\"\"" && raw != "\"0\"";
+    }
+  }
+  const slang::ConstantValue &val = attr.getValue();
+  if (val.isString())
+    return !val.str().empty() && val.str() != "0";
+  return val.isTrue();
+}
+
+/// Convert an elaborated Slang value parameter into a typed MLIR attribute
+/// suitable for `hw::ParamDeclAttr`. Falls back to `hw::ParamVerbatimAttr` for
+/// four-state integers and non-scalar constants so no parameter binding is
+/// lost.
+static TypedAttr
+convertParameterValue(MLIRContext *ctx,
+                      const slang::ast::ParameterSymbol &param) {
+  const slang::ConstantValue &val = param.getValue();
+  if (val.bad())
+    return {};
+  if (val.isInteger()) {
+    const slang::SVInt &svint = val.integer();
+    if (svint.getBitWidth() == 0)
+      return {};
+    if (svint.hasUnknown()) {
+      return hw::ParamVerbatimAttr::get(StringAttr::get(
+          ctx, svint.toString(slang::SVInt::MAX_BITS, /*exactUnknowns=*/true)));
+    }
+    APInt apInt(svint.getBitWidth(),
+                ArrayRef<uint64_t>(svint.getRawPtr(), svint.getNumWords()));
+    IntegerType::SignednessSemantics signedness = param.getType().isSigned()
+                                                      ? IntegerType::Signed
+                                                      : IntegerType::Unsigned;
+    auto intType = IntegerType::get(ctx, svint.getBitWidth(), signedness);
+    return IntegerAttr::get(intType, apInt);
+  }
+  if (val.isReal())
+    return FloatAttr::get(mlir::Float64Type::get(ctx), val.real().v);
+  if (val.isShortReal())
+    return FloatAttr::get(mlir::Float32Type::get(ctx), val.shortReal().v);
+  if (val.isString())
+    return StringAttr::get(ctx, val.str());
+  if (val.isContainer() || val.isUnbounded() || val.isNullHandle()) {
+    return hw::ParamVerbatimAttr::get(StringAttr::get(
+        ctx, val.toString(slang::SVInt::MAX_BITS, /*exactUnknowns=*/true,
+                          /*useAssignmentPatterns=*/true)));
+  }
+  return {};
+}
+
+/// Populate the value-less parameter declarations for `moore.module.extern`
+/// and the corresponding concrete parameter bindings for `moore.instance`.
+static void
+collectExternalModuleParameters(MLIRContext *ctx,
+                                const slang::ast::InstanceBodySymbol &module,
+                                SmallVectorImpl<Attribute> &declParams,
+                                SmallVectorImpl<Attribute> &instParams) {
+  for (const auto *paramBase : module.getParameters()) {
+    if (paramBase->isLocalParam())
+      continue;
+    TypedAttr valAttr;
+    if (const auto *param =
+            paramBase->symbol.as_if<slang::ast::ParameterSymbol>()) {
+      valAttr = convertParameterValue(ctx, *param);
+    } else if (const auto *typeParam =
+                   paramBase->symbol.as_if<slang::ast::TypeParameterSymbol>()) {
+      const auto &targetType = typeParam->targetType.getType();
+      if (!targetType.isError())
+        valAttr = hw::ParamVerbatimAttr::get(
+            StringAttr::get(ctx, targetType.toString()));
+    }
+    if (!valAttr)
+      continue;
+    auto nameAttr = StringAttr::get(ctx, paramBase->symbol.name);
+    // Keep external module parameter declarations value-less so ExportVerilog
+    // always emits explicit `#(.PARAM(VAL))` instance overrides.
+    declParams.push_back(hw::ParamDeclAttr::get(nameAttr, valAttr.getType()));
+    instParams.push_back(hw::ParamDeclAttr::get(nameAttr, valAttr));
+  }
+}
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -475,8 +570,8 @@ struct ModuleVisitor : public BaseVisitor {
     auto *moduleLowering = context.convertModuleHeader(body);
     if (!moduleLowering)
       return failure();
-    auto module = moduleLowering->op;
-    auto moduleType = module.getModuleType();
+    Operation *module = moduleLowering->op;
+    hw::ModuleType moduleType = moduleLowering->moduleType;
 
     // Set visibility attribute for instantiated module.
     SymbolTable::setSymbolVisibility(module, SymbolTable::Visibility::Private);
@@ -719,17 +814,19 @@ struct ModuleVisitor : public BaseVisitor {
     // Then we pass it as the input port with the ref<T> type of the instance.
     // Note that `body` is always the canonical instance body here and in the
     // `hierPaths` keys.
-    for (const auto &hierPath : context.hierPaths[body]) {
-      assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
-      if (!hierPath.hierName || hierPath.direction != ArgumentDirection::In)
-        continue;
-      // Which alias is bound in scope depends on which subtree the reference
-      // was observed in, so try them all; a null value is caught below.
-      Value hierValue;
-      for (auto &alias : hierPath.valueSyms)
-        if ((hierValue = context.valueSymbols.lookup(alias.first)))
-          break;
-      inputValues.push_back(hierValue);
+    if (!context.shouldImportAsExtern(*body)) {
+      for (const auto &hierPath : context.hierPaths[body]) {
+        assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
+        if (!hierPath.hierName || hierPath.direction != ArgumentDirection::In)
+          continue;
+        // Which alias is bound in scope depends on which subtree the reference
+        // was observed in, so try them all; a null value is caught below.
+        Value hierValue;
+        for (auto &alias : hierPath.valueSyms)
+          if ((hierValue = context.valueSymbols.lookup(alias.first)))
+            break;
+        inputValues.push_back(hierValue);
+      }
     }
 
     // Check that all input values are non-null before creating the instance.
@@ -762,8 +859,8 @@ struct ModuleVisitor : public BaseVisitor {
     auto inst = moore::InstanceOp::create(
         builder, loc, moduleType.getOutputTypes(),
         builder.getStringAttr(instName),
-        FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
-        inputNames, outputNames);
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputValues,
+        inputNames, outputNames, moduleLowering->instanceParams);
     context.convertAttributes(instNode, inst);
 
     // An alias belongs to this instance if the body containing its symbol is
@@ -1417,6 +1514,18 @@ void Context::convertAttributes(const slang::ast::Symbol &symbol,
     sv::setSVAttributes(op, svAttrs);
 }
 
+bool Context::shouldImportAsExtern(
+    const slang::ast::InstanceBodySymbol &module) const {
+  if (!options.externalizeBlackboxes)
+    return false;
+  bool enabled = false;
+  for (const auto *attr : compilation.getAttributes(module.getDefinition())) {
+    if (attr->name == "blackbox")
+      enabled = isBlackboxAttributeEnabled(*attr);
+  }
+  return enabled;
+}
+
 ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
@@ -1590,24 +1699,26 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   lowering.numExplicitInputs = inputIdx;
 
   // Mapping hierarchical names into the module's ports.
-  for (auto &hierPath : hierPaths[module]) {
-    assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
-    auto hierType = convertType(hierPath.valueSyms.front().first->getType());
-    if (!hierType)
-      return {};
+  if (!shouldImportAsExtern(*module)) {
+    for (auto &hierPath : hierPaths[module]) {
+      assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
+      auto hierType = convertType(hierPath.valueSyms.front().first->getType());
+      if (!hierType)
+        return {};
 
-    if (auto hierName = hierPath.hierName) {
-      // The type of all hierarchical names are marked as the "RefType".
-      hierType = moore::RefType::get(cast<moore::UnpackedType>(hierType));
-      if (hierPath.direction == ArgumentDirection::Out) {
-        hierPath.idx = outputIdx++;
-        modulePorts.push_back({hierName, hierType, hw::ModulePort::Output});
-      } else {
-        hierPath.idx = inputIdx++;
-        modulePorts.push_back({hierName, hierType, hw::ModulePort::Input});
-        auto hierLoc =
-            convertLocation(hierPath.valueSyms.front().first->location);
-        block->addArgument(hierType, hierLoc);
+      if (auto hierName = hierPath.hierName) {
+        // The type of all hierarchical names are marked as the "RefType".
+        hierType = moore::RefType::get(cast<moore::UnpackedType>(hierType));
+        if (hierPath.direction == ArgumentDirection::Out) {
+          hierPath.idx = outputIdx++;
+          modulePorts.push_back({hierName, hierType, hw::ModulePort::Output});
+        } else {
+          hierPath.idx = inputIdx++;
+          modulePorts.push_back({hierName, hierType, hw::ModulePort::Input});
+          auto hierLoc =
+              convertLocation(hierPath.valueSyms.front().first->location);
+          block->addArgument(hierType, hierLoc);
+        }
       }
     }
   }
@@ -1622,20 +1733,52 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   else
     builder.setInsertionPoint(it->second);
 
-  // Create an empty module that corresponds to this module.
-  auto moduleOp =
-      moore::SVModuleOp::create(builder, loc, module->name, moduleType);
-  convertAttributes(module->getDefinition(), moduleOp);
-  orderedRootOps.insert(it, {key, moduleOp});
-  moduleOp.getBodyRegion().push_back(block.release());
-  lowering.op = moduleOp;
+  lowering.moduleType = moduleType;
+  if (shouldImportAsExtern(*module)) {
+    SmallVector<Attribute> declParams;
+    SmallVector<Attribute> instParams;
+    collectExternalModuleParameters(getContext(), *module, declParams,
+                                    instParams);
+    lowering.instanceParams = builder.getArrayAttr(instParams);
 
-  // Add the module to the symbol table of the MLIR module, which uniquifies its
-  // name as we'd expect.
-  symbolTable.insert(moduleOp);
+    auto externOp =
+        moore::SVModuleExternOp::create(builder, loc, module->name, moduleType,
+                                        builder.getArrayAttr(declParams));
+    convertAttributes(module->getDefinition(), externOp);
+    orderedRootOps.insert(it, {key, externOp});
+    lowering.op = externOp;
 
-  // Schedule the body to be lowered.
-  moduleWorklist.push(module);
+    // Drop stale pointers to the temporary `block` arguments since the extern
+    // op owns no body region and its body will not be lowered.
+    for (auto &port : lowering.ports)
+      port.arg = {};
+    for (auto &fp : lowering.ifacePorts)
+      fp.arg = {};
+
+    // Add the extern module to the symbol table, which uniquifies its name.
+    // Record `verilogName` when uniquified so Verilog export emits the original
+    // SystemVerilog module name for every specialization.
+    StringRef origName = module->name;
+    symbolTable.insert(externOp);
+    if (externOp.getSymName() != origName)
+      externOp.setVerilogNameAttr(builder.getStringAttr(origName));
+  } else {
+    lowering.instanceParams = builder.getArrayAttr({});
+    // Create an empty module that corresponds to this module.
+    auto moduleOp =
+        moore::SVModuleOp::create(builder, loc, module->name, moduleType);
+    convertAttributes(module->getDefinition(), moduleOp);
+    orderedRootOps.insert(it, {key, moduleOp});
+    moduleOp.getBodyRegion().push_back(block.release());
+    lowering.op = moduleOp;
+
+    // Add the module to the symbol table of the MLIR module, which uniquifies
+    // its name as we'd expect.
+    symbolTable.insert(moduleOp);
+
+    // Schedule the body to be lowered.
+    moduleWorklist.push(module);
+  }
 
   // Map duplicate port by Syntax
   for (const auto &port : lowering.ports)
@@ -1647,6 +1790,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 LogicalResult
 Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   auto &lowering = *modules[module];
+  auto moduleOp = cast<moore::SVModuleOp>(lowering.op);
   const auto *prevDefinition = currentDefinition;
   currentDefinition = &module->getDefinition();
   llvm::scope_exit currentDefinitionGuard(
@@ -1654,7 +1798,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   recordDPIExportDirectives(*this, *module, module->getSyntax());
 
   OpBuilder::InsertionGuard g(builder);
-  builder.setInsertionPointToEnd(lowering.op.getBody());
+  builder.setInsertionPointToEnd(moduleOp.getBody());
 
   ValueSymbolScope scope(valueSymbols);
   InterfaceInstanceScope ifaceScope(interfaceInstances);
@@ -1672,7 +1816,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   for (auto &hierPath : hierPaths[module])
     if (hierPath.direction == slang::ast::ArgumentDirection::In &&
         hierPath.idx) {
-      auto arg = lowering.op.getBody()->getArgument(*hierPath.idx);
+      auto arg = moduleOp.getBody()->getArgument(*hierPath.idx);
       for (auto &alias : hierPath.valueSyms)
         valueSymbols.insert(alias.first, arg);
     }
@@ -1851,14 +1995,14 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
       }
     }
     if (!hierValue)
-      return mlir::emitError(lowering.op.getLoc())
+      return mlir::emitError(moduleOp.getLoc())
              << "unable to resolve hierarchical output `"
              << hierPath.hierName.getValue() << "` in module `" << module->name
              << "`";
     outputs.push_back(hierValue);
   }
 
-  moore::OutputOp::create(builder, lowering.op.getLoc(), outputs);
+  moore::OutputOp::create(builder, moduleOp.getLoc(), outputs);
   return success();
 }
 
