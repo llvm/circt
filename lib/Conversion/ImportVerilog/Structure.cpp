@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Support/FVInt.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
 #include "slang/ast/symbols/MemberSymbols.h"
@@ -3039,25 +3040,24 @@ static bool skipUnsupportedCombinationalRow(
 }
 
 /// Helper to accumulate binary boolean operations (moore::AndOp, moore::OrOp).
-/// Folds `acc = acc ? OpT::create(builder, loc, acc, term) : term`.
+/// Folds `acc = acc ? OpT::create(builder, acc, term) : term`.
 template <typename OpT>
-static Value accumulate(OpBuilder &builder, Location loc, Value acc,
-                        Value term) {
+static Value accumulate(ImplicitLocOpBuilder &builder, Value acc, Value term) {
   if (!acc)
     return term;
-  return OpT::create(builder, loc, acc, term);
+  return OpT::create(builder, acc, term);
 }
 
 /// Materialize a 2-state literal (`val` for `One`, `~val` for `Zero`) or null
 /// for `DontCare`, caching the negation in `notVal`.
-static Value buildLevelLiteral(OpBuilder &builder, Location loc, UdpLevel level,
+static Value buildLevelLiteral(ImplicitLocOpBuilder &builder, UdpLevel level,
                                Value val, Value &notVal) {
   switch (level) {
   case UdpLevel::One:
     return val;
   case UdpLevel::Zero:
     if (!notVal)
-      notVal = moore::NotOp::create(builder, loc, val);
+      notVal = moore::NotOp::create(builder, val);
     return notVal;
   case UdpLevel::DontCare:
     return {};
@@ -3068,15 +3068,15 @@ static Value buildLevelLiteral(OpBuilder &builder, Location loc, UdpLevel level,
 
 /// Build the productive AND-term for this row. Returns nullptr if the row is
 /// unproductive (all don't cares).
-static Value buildProductiveTerm(OpBuilder &builder, Location loc,
+static Value buildProductiveTerm(ImplicitLocOpBuilder &builder,
                                  ArrayRef<UdpLevel> inputs,
                                  ValueRange inputVals,
                                  SmallVectorImpl<Value> &notVars) {
   Value term;
   for (size_t i = 0, e = inputVals.size(); i < e; ++i) {
-    if (Value lit = buildLevelLiteral(builder, loc, inputs[i], inputVals[i],
-                                      notVars[i]))
-      term = accumulate<moore::AndOp>(builder, loc, term, lit);
+    if (Value lit =
+            buildLevelLiteral(builder, inputs[i], inputVals[i], notVars[i]))
+      term = accumulate<moore::AndOp>(builder, term, lit);
   }
   return term;
 }
@@ -3361,7 +3361,7 @@ classifySequentialTableRows(const slang::ast::PrimitiveSymbol &primitiveType,
 /// downstream synthesis and Deseq to infer a single `seq.firreg ... reset
 /// async (clear | preset), preset`. When only `'0'` or only `'1'` rows exist,
 /// `asyncVal` is a constant 0 or 1.
-static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
+static AsyncConditions buildAsyncConditions(ImplicitLocOpBuilder &builder,
                                             ArrayRef<AsyncRow> asyncRows,
                                             ArrayRef<Value> inputVals,
                                             Value qVal, moore::IntType i1Ty) {
@@ -3370,32 +3370,30 @@ static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
   Value notQ;
   for (const auto &asyncRow : asyncRows) {
     Value term =
-        buildProductiveTerm(builder, loc, asyncRow.inputs, inputVals, notVars);
-    if (Value stateLit =
-            buildLevelLiteral(builder, loc, asyncRow.state, qVal, notQ))
-      term =
-          term ? moore::AndOp::create(builder, loc, term, stateLit) : stateLit;
+        buildProductiveTerm(builder, asyncRow.inputs, inputVals, notVars);
+    if (Value stateLit = buildLevelLiteral(builder, asyncRow.state, qVal, notQ))
+      term = term ? moore::AndOp::create(builder, term, stateLit) : stateLit;
     if (!term)
-      term = moore::ConstantOp::create(builder, loc, i1Ty, 1, false);
+      term = moore::ConstantOp::create(builder, i1Ty, 1, false);
     if (!asyncRow.output) {
       result.clearCond =
-          accumulate<moore::OrOp>(builder, loc, result.clearCond, term);
+          accumulate<moore::OrOp>(builder, result.clearCond, term);
     } else {
       result.presetCond =
-          accumulate<moore::OrOp>(builder, loc, result.presetCond, term);
+          accumulate<moore::OrOp>(builder, result.presetCond, term);
     }
   }
 
   if (result.clearCond && result.presetCond) {
     result.asyncCond =
-        moore::OrOp::create(builder, loc, result.clearCond, result.presetCond);
+        moore::OrOp::create(builder, result.clearCond, result.presetCond);
     result.asyncVal = result.presetCond;
   } else if (result.clearCond) {
     result.asyncCond = result.clearCond;
-    result.asyncVal = moore::ConstantOp::create(builder, loc, i1Ty, 0, false);
+    result.asyncVal = moore::ConstantOp::create(builder, i1Ty, 0, false);
   } else if (result.presetCond) {
     result.asyncCond = result.presetCond;
-    result.asyncVal = moore::ConstantOp::create(builder, loc, i1Ty, 1, false);
+    result.asyncVal = moore::ConstantOp::create(builder, i1Ty, 1, false);
   }
   return result;
 }
@@ -3403,7 +3401,7 @@ static AsyncConditions buildAsyncConditions(OpBuilder &builder, Location loc,
 /// Detect inputs that are held constant across all synchronous rows (e.g.,
 /// clock enable lines) and build a combined enable term (`syncEn`).
 /// Non-constant inputs are classified as data inputs.
-static Value computeSyncEnable(OpBuilder &builder, Location loc,
+static Value computeSyncEnable(ImplicitLocOpBuilder &builder,
                                ArrayRef<SyncRow> syncRows,
                                ArrayRef<Value> seqInputVals,
                                ArrayRef<size_t> syncInputIndices,
@@ -3430,8 +3428,7 @@ static Value computeSyncEnable(OpBuilder &builder, Location loc,
       if (*commonLevel == UdpLevel::One)
         enTerms.push_back(seqInputVals[idx]);
       else
-        enTerms.push_back(
-            moore::NotOp::create(builder, loc, seqInputVals[idx]));
+        enTerms.push_back(moore::NotOp::create(builder, seqInputVals[idx]));
     } else {
       bool hasMeaningfulLevel = llvm::any_of(syncRows, [idx](const SyncRow &r) {
         return r.inputs[idx] == UdpLevel::Zero ||
@@ -3442,29 +3439,28 @@ static Value computeSyncEnable(OpBuilder &builder, Location loc,
     }
   }
 
-  Value syncEn;
-  for (Value term : enTerms)
-    syncEn = accumulate<moore::AndOp>(builder, loc, syncEn, term);
-  return syncEn;
+  return llvm::accumulate(enTerms, Value{}, [&](Value acc, Value term) {
+    return accumulate<moore::AndOp>(builder, acc, term);
+  });
 }
 
-static Value createConditional(OpBuilder &builder, Location loc, Type type,
+static Value createConditional(ImplicitLocOpBuilder &builder, Type type,
                                Value cond, Value trueVal, Value falseVal) {
-  auto condOp = moore::ConditionalOp::create(builder, loc, type, cond);
+  auto condOp = moore::ConditionalOp::create(builder, type, cond);
   auto &trueBlk = condOp.getTrueRegion().emplaceBlock();
   auto &falseBlk = condOp.getFalseRegion().emplaceBlock();
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToStart(&trueBlk);
-  moore::YieldOp::create(builder, loc, trueVal);
+  moore::YieldOp::create(builder, trueVal);
   builder.setInsertionPointToStart(&falseBlk);
-  moore::YieldOp::create(builder, loc, falseVal);
+  moore::YieldOp::create(builder, falseVal);
   return condOp.getResult();
 }
 
 /// Compute the next-state value expression (`syncVal`) to assign to the state
 /// variable on each active clock edge.
-static Value computeSyncNextState(OpBuilder &builder, Location loc,
-                                  size_t clkIdx, ArrayRef<SyncRow> syncRows,
+static Value computeSyncNextState(ImplicitLocOpBuilder &builder, size_t clkIdx,
+                                  ArrayRef<SyncRow> syncRows,
                                   const SequentialLoweringState &state,
                                   Value qVar) {
   // Fast-path for simple D or ~D pass-through when behavior is symmetric
@@ -3503,7 +3499,7 @@ static Value computeSyncNextState(OpBuilder &builder, Location loc,
       }
     }
     if (validPassThrough && outFor0 && outFor1 && *outFor0 != *outFor1) {
-      return *outFor0 ? Value(moore::NotOp::create(builder, loc,
+      return *outFor0 ? Value(moore::NotOp::create(builder,
                                                    state.seqInputVals[dIdx]))
                       : state.seqInputVals[dIdx];
     }
@@ -3512,8 +3508,7 @@ static Value computeSyncNextState(OpBuilder &builder, Location loc,
   // Evaluate synchronous rows as a priority chain of `moore.conditional` ops
   // with current state `q` as the default fallback to preserve hold semantics
   // for stripped hold rows and unenumerated input combinations.
-  Value qVal =
-      state.qVal ? state.qVal : moore::ReadOp::create(builder, loc, qVar);
+  Value qVal = state.qVal ? state.qVal : moore::ReadOp::create(builder, qVar);
   Value syncVal = qVal;
   Value zeroVal;
   Value oneVal;
@@ -3530,36 +3525,33 @@ static Value computeSyncNextState(OpBuilder &builder, Location loc,
     Value rowOut;
     if (srow.output) {
       if (!oneVal)
-        oneVal = moore::ConstantOp::create(builder, loc, state.i1Ty, 1, false);
+        oneVal = moore::ConstantOp::create(builder, state.i1Ty, 1, false);
       rowOut = oneVal;
     } else {
       if (!zeroVal)
-        zeroVal = moore::ConstantOp::create(builder, loc, state.i1Ty, 0, false);
+        zeroVal = moore::ConstantOp::create(builder, state.i1Ty, 0, false);
       rowOut = zeroVal;
     }
 
     Value term =
-        buildProductiveTerm(builder, loc, inputs, state.seqInputVals, notVars);
-    if (Value stateLit =
-            buildLevelLiteral(builder, loc, srow.state, qVal, notQ))
-      term = accumulate<moore::AndOp>(builder, loc, term, stateLit);
+        buildProductiveTerm(builder, inputs, state.seqInputVals, notVars);
+    if (Value stateLit = buildLevelLiteral(builder, srow.state, qVal, notQ))
+      term = accumulate<moore::AndOp>(builder, term, stateLit);
     if (!term) {
       syncVal = rowOut;
       continue;
     }
 
-    syncVal =
-        createConditional(builder, loc, state.i1Ty, term, rowOut, syncVal);
+    syncVal = createConditional(builder, state.i1Ty, term, rowOut, syncVal);
   }
   return syncVal;
 }
 
 /// Emit an edge-sensitive `moore.procedure always` for a sequential UDP.
 static void emitSequentialEdgeSensitiveProcedure(
-    Context &context, OpBuilder &builder, Location loc, size_t clkIdx,
-    moore::Edge clkEdge, ArrayRef<SyncRow> syncRows,
-    SequentialLoweringState state, const AsyncConditions &asyncConditions,
-    Value qVar) {
+    ImplicitLocOpBuilder &builder, size_t clkIdx, moore::Edge clkEdge,
+    ArrayRef<SyncRow> syncRows, SequentialLoweringState state,
+    const AsyncConditions &asyncConditions, Value qVar) {
   auto i1RefTy = cast<moore::RefType>(qVar.getType());
 
   // Collect non-clock and non-async input port indices.
@@ -3570,109 +3562,105 @@ static void emitSequentialEdgeSensitiveProcedure(
   }
 
   // Compute synchronous enable terms and identify data inputs.
-  Value syncEn = computeSyncEnable(builder, loc, syncRows, state.seqInputVals,
+  Value syncEn = computeSyncEnable(builder, syncRows, state.seqInputVals,
                                    syncInputIndices, state.dataInputIndices);
 
   // Construct synchronous next-state value expression.
-  Value syncVal =
-      computeSyncNextState(builder, loc, clkIdx, syncRows, state, qVar);
+  Value syncVal = computeSyncNextState(builder, clkIdx, syncRows, state, qVar);
 
   // Emit clock net (and async condition net, if present) and
   // `moore.procedure always`.
   auto clkNet =
-      moore::NetOp::create(builder, loc, i1RefTy, StringAttr{},
-                           moore::NetKind::Wire, state.seqInputVals[clkIdx]);
+      moore::NetOp::create(builder, i1RefTy, StringAttr{}, moore::NetKind::Wire,
+                           state.seqInputVals[clkIdx]);
   moore::NetOp asyncCondNet;
   if (asyncConditions.asyncCond) {
     asyncCondNet =
-        moore::NetOp::create(builder, loc, i1RefTy, StringAttr{},
+        moore::NetOp::create(builder, i1RefTy, StringAttr{},
                              moore::NetKind::Wire, asyncConditions.asyncCond);
   }
 
   auto procOp =
-      moore::ProcedureOp::create(builder, loc, moore::ProcedureKind::Always);
+      moore::ProcedureOp::create(builder, moore::ProcedureKind::Always);
   OpBuilder::InsertionGuard guard(builder);
   auto &entryBlock = procOp.getBody().emplaceBlock();
   builder.setInsertionPointToEnd(&entryBlock);
 
   // Wait for the clock edge event (or async trigger event).
-  auto waitOp = moore::WaitEventOp::create(builder, loc);
+  auto waitOp = moore::WaitEventOp::create(builder);
   builder.setInsertionPointToStart(&waitOp.getBody().emplaceBlock());
-  Value clkTrig = moore::ReadOp::create(builder, loc, clkNet);
-  moore::DetectEventOp::create(builder, loc, clkEdge, clkTrig, Value{});
+  Value clkTrig = moore::ReadOp::create(builder, clkNet);
+  moore::DetectEventOp::create(builder, clkEdge, clkTrig, Value{});
   if (asyncCondNet) {
-    Value asyncTrig = moore::ReadOp::create(builder, loc, asyncCondNet);
-    moore::DetectEventOp::create(builder, loc, moore::Edge::PosEdge, asyncTrig,
+    Value asyncTrig = moore::ReadOp::create(builder, asyncCondNet);
+    moore::DetectEventOp::create(builder, moore::Edge::PosEdge, asyncTrig,
                                  Value{});
   }
   builder.setInsertionPointAfter(waitOp);
 
   auto emitSyncUpdate = [&]() {
     if (!syncEn) {
-      moore::NonBlockingAssignOp::create(builder, loc, qVar, syncVal);
+      moore::NonBlockingAssignOp::create(builder, qVar, syncVal);
       return;
     }
-    Value syncEnI1 = context.convertToI1(syncEn);
+    Value syncEnI1 = moore::ToBuiltinIntOp::create(builder, syncEn);
     Block &syncTrueBlock = procOp.getBody().emplaceBlock();
     Block &syncExitBlock = procOp.getBody().emplaceBlock();
-    mlir::cf::CondBranchOp::create(builder, loc, syncEnI1, &syncTrueBlock,
+    mlir::cf::CondBranchOp::create(builder, syncEnI1, &syncTrueBlock,
                                    &syncExitBlock);
     builder.setInsertionPointToEnd(&syncTrueBlock);
-    moore::NonBlockingAssignOp::create(builder, loc, qVar, syncVal);
-    mlir::cf::BranchOp::create(builder, loc, &syncExitBlock);
+    moore::NonBlockingAssignOp::create(builder, qVar, syncVal);
+    mlir::cf::BranchOp::create(builder, &syncExitBlock);
     builder.setInsertionPointToEnd(&syncExitBlock);
   };
 
   if (asyncCondNet) {
-    Value acondRead = moore::ReadOp::create(builder, loc, asyncCondNet);
-    Value acondI1 = context.convertToI1(acondRead);
+    Value acondRead = moore::ReadOp::create(builder, asyncCondNet);
+    Value acondI1 = moore::ToBuiltinIntOp::create(builder, acondRead);
     Block &asyncBlock = procOp.getBody().emplaceBlock();
     Block &syncBlock = procOp.getBody().emplaceBlock();
     Block &exitBlock = procOp.getBody().emplaceBlock();
-    mlir::cf::CondBranchOp::create(builder, loc, acondI1, &asyncBlock,
-                                   &syncBlock);
+    mlir::cf::CondBranchOp::create(builder, acondI1, &asyncBlock, &syncBlock);
 
     // Async block:
     builder.setInsertionPointToEnd(&asyncBlock);
-    moore::NonBlockingAssignOp::create(builder, loc, qVar,
-                                       asyncConditions.asyncVal);
-    mlir::cf::BranchOp::create(builder, loc, &exitBlock);
+    moore::NonBlockingAssignOp::create(builder, qVar, asyncConditions.asyncVal);
+    mlir::cf::BranchOp::create(builder, &exitBlock);
 
     // Sync block:
     builder.setInsertionPointToEnd(&syncBlock);
     emitSyncUpdate();
-    mlir::cf::BranchOp::create(builder, loc, &exitBlock);
+    mlir::cf::BranchOp::create(builder, &exitBlock);
 
     builder.setInsertionPointToEnd(&exitBlock);
   } else {
     emitSyncUpdate();
   }
 
-  moore::ReturnOp::create(builder, loc);
+  moore::ReturnOp::create(builder);
 }
 
 /// Emit a level-sensitive `moore.procedure always_latch` for a latch UDP.
-static void emitSequentialLevelSensitiveProcedure(Context &context,
-                                                  OpBuilder &builder,
-                                                  Location loc, Value asyncCond,
+static void emitSequentialLevelSensitiveProcedure(ImplicitLocOpBuilder &builder,
+                                                  Value asyncCond,
                                                   Value asyncVal, Value qVar) {
-  auto procOp = moore::ProcedureOp::create(builder, loc,
-                                           moore::ProcedureKind::AlwaysLatch);
+  auto procOp =
+      moore::ProcedureOp::create(builder, moore::ProcedureKind::AlwaysLatch);
   OpBuilder::InsertionGuard guard(builder);
   auto &entryBlock = procOp.getBody().emplaceBlock();
   builder.setInsertionPointToEnd(&entryBlock);
 
-  Value acondI1 = context.convertToI1(asyncCond);
+  Value acondI1 = moore::ToBuiltinIntOp::create(builder, asyncCond);
   Block &trueBlock = procOp.getBody().emplaceBlock();
   Block &exitBlock = procOp.getBody().emplaceBlock();
 
-  mlir::cf::CondBranchOp::create(builder, loc, acondI1, &trueBlock, &exitBlock);
+  mlir::cf::CondBranchOp::create(builder, acondI1, &trueBlock, &exitBlock);
   builder.setInsertionPointToEnd(&trueBlock);
-  moore::BlockingAssignOp::create(builder, loc, qVar, asyncVal);
-  mlir::cf::BranchOp::create(builder, loc, &exitBlock);
+  moore::BlockingAssignOp::create(builder, qVar, asyncVal);
+  mlir::cf::BranchOp::create(builder, &exitBlock);
 
   builder.setInsertionPointToEnd(&exitBlock);
-  moore::ReturnOp::create(builder, loc);
+  moore::ReturnOp::create(builder);
 }
 
 FailureOr<moore::SVModuleOp>
@@ -3681,7 +3669,7 @@ Context::convertCombinationalUserDefinedPrimitiveDef(
   auto loc = convertLocation(primitive.location);
   auto l1Ty = moore::IntType::getLogic(getContext(), 1);
   auto *block = &moduleOp.getBodyRegion().front();
-  builder.setInsertionPointToEnd(block);
+  auto locBuilder = ImplicitLocOpBuilder::atBlockEnd(loc, block);
 
   auto inputVals = block->getArguments();
   size_t numInputs = inputVals.size();
@@ -3694,18 +3682,18 @@ Context::convertCombinationalUserDefinedPrimitiveDef(
         skipUnsupportedCombinationalRow(entry, levels, numInputs))
       continue;
 
-    Value term = buildProductiveTerm(builder, loc, levels, inputVals, notVars);
+    Value term = buildProductiveTerm(locBuilder, levels, inputVals, notVars);
     if (!term) {
       // All inputs were don't cares ('?'): row unconditionally evaluates to 1.
-      sum = moore::ConstantOp::create(builder, loc, l1Ty, 1);
+      sum = moore::ConstantOp::create(locBuilder, l1Ty, 1);
       break;
     }
-    sum = accumulate<moore::OrOp>(builder, loc, sum, term);
+    sum = accumulate<moore::OrOp>(locBuilder, sum, term);
   }
   if (!sum)
-    sum = moore::ConstantOp::create(builder, loc, l1Ty, 0);
+    sum = moore::ConstantOp::create(locBuilder, l1Ty, 0);
 
-  moore::OutputOp::create(builder, loc, sum);
+  moore::OutputOp::create(locBuilder, sum);
   return moduleOp;
 }
 
@@ -3714,6 +3702,7 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
   auto loc = convertLocation(primitive.location);
   auto *block = &moduleOp.getBodyRegion().front();
   builder.setInsertionPointToEnd(block);
+  ImplicitLocOpBuilder locBuilder(loc, builder);
 
   auto inputArgs = block->getArguments();
   size_t numInputs = inputArgs.size();
@@ -3749,11 +3738,11 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
   if (primitive.initVal && primitive.initVal->isInteger()) {
     const auto &svInt = primitive.initVal->integer();
     if (!svInt.hasUnknown())
-      initVal = moore::ConstantOp::create(builder, loc, i1Ty,
-                                          svInt == 1 ? 1 : 0, false);
+      initVal = moore::ConstantOp::create(locBuilder, i1Ty, svInt == 1 ? 1 : 0,
+                                          false);
   }
-  StringAttr qName = builder.getStringAttr(primitive.ports[0]->name);
-  auto qVar = moore::VariableOp::create(builder, loc, i1RefTy, qName, initVal);
+  StringAttr qName = locBuilder.getStringAttr(primitive.ports[0]->name);
+  auto qVar = moore::VariableOp::create(locBuilder, i1RefTy, qName, initVal);
 
   // Convert all input arguments to 2-state boolean values.
   SmallVector<Value> seqInputVals;
@@ -3775,7 +3764,7 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
                    });
   Value qVal;
   if (usesState)
-    qVal = moore::ReadOp::create(builder, loc, qVar);
+    qVal = moore::ReadOp::create(locBuilder, qVar);
 
   SequentialLoweringState state{
       .seqInputVals = seqInputVals,
@@ -3787,15 +3776,14 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
 
   // Build level-sensitive clear/preset conditions from table.asyncRows.
   AsyncConditions asyncConditions = buildAsyncConditions(
-      builder, loc, table.asyncRows, seqInputVals, qVal, i1Ty);
+      locBuilder, table.asyncRows, seqInputVals, qVal, i1Ty);
 
   if (clkIdx.has_value()) {
-    emitSequentialEdgeSensitiveProcedure(*this, builder, loc, *clkIdx, *clkEdge,
+    emitSequentialEdgeSensitiveProcedure(locBuilder, *clkIdx, *clkEdge,
                                          table.syncRows, state, asyncConditions,
                                          qVar);
   } else if (asyncConditions.asyncCond) {
-    emitSequentialLevelSensitiveProcedure(*this, builder, loc,
-                                          asyncConditions.asyncCond,
+    emitSequentialLevelSensitiveProcedure(locBuilder, asyncConditions.asyncCond,
                                           asyncConditions.asyncVal, qVar);
   } else {
     return mlir::emitError(loc)
@@ -3803,14 +3791,14 @@ FailureOr<moore::SVModuleOp> Context::convertSequentialUserDefinedPrimitiveDef(
            << "` without active transitions";
   }
 
-  Value qOut = moore::ReadOp::create(builder, loc, qVar);
+  Value qOut = moore::ReadOp::create(locBuilder, qVar);
 
   auto l1Ty = moore::IntType::getLogic(getContext(), 1);
   Value converted = materializeConversion(l1Ty, qOut, false, loc);
   if (!converted)
     return failure();
 
-  moore::OutputOp::create(builder, loc, converted);
+  moore::OutputOp::create(locBuilder, converted);
   return moduleOp;
 }
 
