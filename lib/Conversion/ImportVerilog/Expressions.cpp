@@ -53,6 +53,26 @@ static Value getIsUnknown(OpBuilder &builder, Location loc, Value value,
   return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
 }
 
+/// Read the value behind a ref or net, notifying `rvalueReadCallback`. Other
+/// values are returned unchanged.
+static Value readIfIsWrapper(Context &context, Location loc, Value value) {
+  if (!isa<moore::WrapperType>(value.getType()))
+    return value;
+  auto readOp = moore::ReadOp::create(context.builder, loc, value);
+  if (context.rvalueReadCallback)
+    context.rvalueReadCallback(readOp);
+  return readOp.getResult();
+}
+
+/// Return the ref or net type of field `name` in virtual interface handle
+/// `base`.
+static moore::WrapperType getVirtualInterfaceFieldType(Value base,
+                                                       StringAttr name) {
+  auto structType = cast<moore::UnpackedStructType>(base.getType());
+  return cast<moore::WrapperType>(
+      structType.getMembers()[*structType.getFieldIndex(name)].type);
+}
+
 /// Coerce a Moore integer value to a builtin integer, handling four-valued
 /// inputs by first mapping x/z to 0 via LogicToIntOp.
 static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
@@ -249,15 +269,8 @@ struct ExprVisitor {
   /// Materialize the rvalue of a symbol, regardless of whether it is backed by
   /// a local reference, global variable, or class property.
   Value materializeSymbolRvalue(const slang::ast::ValueSymbol &sym) {
-    if (auto value = context.valueSymbols.lookup(&sym)) {
-      if (isa<moore::RefType>(value.getType())) {
-        auto readOp = moore::ReadOp::create(builder, loc, value);
-        if (context.rvalueReadCallback)
-          context.rvalueReadCallback(readOp);
-        return readOp.getResult();
-      }
-      return value;
-    }
+    if (auto value = context.valueSymbols.lookup(&sym))
+      return readIfIsWrapper(context, loc, value);
 
     if (auto globalOp = context.globalVariables.lookup(&sym)) {
       auto ref = moore::GetGlobalVariableOp::create(builder, loc, globalOp);
@@ -307,7 +320,7 @@ struct ExprVisitor {
     // We only support indexing into a few select types for now.
     auto derefType = value.getType();
     if (isLvalue)
-      derefType = cast<moore::RefType>(derefType).getNestedType();
+      derefType = cast<moore::WrapperType>(derefType).getNestedType();
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
@@ -366,8 +379,10 @@ struct ExprVisitor {
       return moore::StringGetOp::create(builder, loc, value, index);
     }
 
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto resultType = isLvalue
+                          ? cast<moore::WrapperType>(value.getType())
+                                .withNestedType(cast<moore::UnpackedType>(type))
+                          : type;
     auto range = expr.value().type->getFixedRange();
     if (auto *constValue = expr.selector().getConstant();
         constValue && constValue->isInteger()) {
@@ -459,7 +474,7 @@ struct ExprVisitor {
 
     auto derefType = value.getType();
     if (isLvalue)
-      derefType = cast<moore::RefType>(derefType).getNestedType();
+      derefType = cast<moore::WrapperType>(derefType).getNestedType();
 
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
@@ -601,8 +616,10 @@ struct ExprVisitor {
     // to the right bound of the range, which provides the index of the least
     // significant selected storage bit, we get the bit offset at which we want
     // to start extracting.
-    auto resultType =
-        isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type)) : type;
+    auto resultType = isLvalue
+                          ? cast<moore::WrapperType>(value.getType())
+                                .withNestedType(cast<moore::UnpackedType>(type))
+                          : type;
 
     if (offsetDyn) {
       offsetDyn = getSelectIndex(context, loc, offsetDyn, range);
@@ -781,14 +798,6 @@ struct ExprVisitor {
     // returns the stored reference directly (for lvalues) or reads it (for
     // rvalues).
     if (valueType->isVirtualInterface()) {
-      auto memberType = dyn_cast<moore::UnpackedType>(type);
-      if (!memberType) {
-        mlir::emitError(loc)
-            << "unsupported virtual interface member type: " << type;
-        return {};
-      }
-      auto resultRefType = moore::RefType::get(memberType);
-
       // Always use the rvalue of the base handle to avoid creating
       // ref<ref<T>> for lvalue member access.
       Value base = context.convertRvalueExpression(expr.value());
@@ -796,7 +805,8 @@ struct ExprVisitor {
         return {};
 
       auto memberRef = moore::StructExtractOp::create(
-          builder, loc, resultRefType, memberName, base);
+          builder, loc, getVirtualInterfaceFieldType(base, memberName),
+          memberName, base);
       if (isLvalue)
         return memberRef;
       return moore::ReadOp::create(builder, loc, memberRef);
@@ -804,12 +814,13 @@ struct ExprVisitor {
 
     // Handle structs.
     if (valueType->isStruct()) {
-      auto resultType =
-          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
-                   : type;
       auto value = convertLvalueOrRvalueExpression(expr.value());
       if (!value)
         return {};
+      auto resultType =
+          isLvalue ? cast<moore::WrapperType>(value.getType())
+                         .withNestedType(cast<moore::UnpackedType>(type))
+                   : type;
 
       if (isLvalue)
         return moore::StructExtractRefOp::create(builder, loc, resultType,
@@ -820,12 +831,13 @@ struct ExprVisitor {
 
     // Handle unions.
     if (valueType->isPackedUnion() || valueType->isUnpackedUnion()) {
-      auto resultType =
-          isLvalue ? moore::RefType::get(cast<moore::UnpackedType>(type))
-                   : type;
       auto value = convertLvalueOrRvalueExpression(expr.value());
       if (!value)
         return {};
+      auto resultType =
+          isLvalue ? cast<moore::WrapperType>(value.getType())
+                         .withNestedType(cast<moore::UnpackedType>(type))
+                   : type;
 
       if (isLvalue)
         return moore::UnionExtractRefOp::create(builder, loc, resultType,
@@ -925,15 +937,8 @@ struct RvalueExprVisitor : public ExprVisitor {
   // Handle named values, such as references to declared variables.
   Value visit(const slang::ast::NamedValueExpression &expr) {
     // Handle local variables.
-    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-      if (isa<moore::RefType>(value.getType())) {
-        auto readOp = moore::ReadOp::create(builder, loc, value);
-        if (context.rvalueReadCallback)
-          context.rvalueReadCallback(readOp);
-        value = readOp.getResult();
-      }
-      return value;
-    }
+    if (auto value = context.valueSymbols.lookup(&expr.symbol))
+      return readIfIsWrapper(context, loc, value);
 
     // Handle global variables.
     if (auto globalOp = context.globalVariables.lookup(&expr.symbol)) {
@@ -954,16 +959,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     // populated at declaration sites.
     if (auto access = context.virtualIfaceMembers.lookup(&expr.symbol);
         access.base) {
-      auto type = context.convertType(*expr.type);
-      if (!type)
-        return {};
-      auto memberType = dyn_cast<moore::UnpackedType>(type);
-      if (!memberType) {
-        mlir::emitError(loc)
-            << "unsupported virtual interface member type: " << type;
-        return {};
-      }
-
       Value base = materializeSymbolRvalue(*access.base);
       if (!base) {
         auto d = mlir::emitError(loc, "unknown name `")
@@ -976,9 +971,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       auto fieldName = access.fieldName
                            ? access.fieldName
                            : builder.getStringAttr(expr.symbol.name);
-      auto memberRefType = moore::RefType::get(memberType);
       auto memberRef = moore::StructExtractOp::create(
-          builder, loc, memberRefType, fieldName, base);
+          builder, loc, getVirtualInterfaceFieldType(base, fieldName),
+          fieldName, base);
       auto readOp = moore::ReadOp::create(builder, loc, memberRef);
       if (context.rvalueReadCallback)
         context.rvalueReadCallback(readOp);
@@ -1014,30 +1009,16 @@ struct RvalueExprVisitor : public ExprVisitor {
         if (&inst->body == symbolBody ||
             (symbolBody && inst->body.getDeclaringDefinition() ==
                                symbolBody->getDeclaringDefinition())) {
-          if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-            if (isa<moore::RefType>(value.getType())) {
-              auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-              if (context.rvalueReadCallback)
-                context.rvalueReadCallback(readOp);
-              value = readOp.getResult();
-            }
-            return value;
-          }
+          if (auto value = context.valueSymbols.lookup(&expr.symbol))
+            return readIfIsWrapper(context, hierLoc, value);
         }
       }
     }
 
     // Inside a function body, a captured symbol must resolve to the capture
     // argument to respect region isolation.
-    if (auto value = context.resolveCapturedValue(expr.symbol)) {
-      if (isa<moore::RefType>(value.getType())) {
-        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-        if (context.rvalueReadCallback)
-          context.rvalueReadCallback(readOp);
-        value = readOp.getResult();
-      }
-      return value;
-    }
+    if (auto value = context.resolveCapturedValue(expr.symbol))
+      return readIfIsWrapper(context, hierLoc, value);
 
     // For cross-instance hierarchical references, prefer the isntance-aware
     // hierValueSymbols lookup. Sibling instances elaborate distinct symbol
@@ -1045,38 +1026,16 @@ struct RvalueExprVisitor : public ExprVisitor {
     // resolutions separate where the scoped table could conflate them.
     if (auto key = context.buildHierValueKey(expr)) {
       if (auto it = context.hierValueSymbols.find(*key);
-          it != context.hierValueSymbols.end()) {
-        auto value = it->second;
-        if (isa<moore::RefType>(value.getType())) {
-          auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-          if (context.rvalueReadCallback)
-            context.rvalueReadCallback(readOp);
-          value = readOp.getResult();
-        }
-        return value;
-      }
+          it != context.hierValueSymbols.end())
+        return readIfIsWrapper(context, hierLoc, it->second);
     }
 
     // Fall back to scoped symbol table (same-scope lookups, self-refs).
-    if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
-      if (isa<moore::RefType>(value.getType())) {
-        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-        if (context.rvalueReadCallback)
-          context.rvalueReadCallback(readOp);
-        value = readOp.getResult();
-      }
-      return value;
-    }
+    if (auto value = context.valueSymbols.lookup(&expr.symbol))
+      return readIfIsWrapper(context, hierLoc, value);
 
-    if (auto value = lookupExpandedInterfaceMember(context, expr)) {
-      if (isa<moore::RefType>(value.getType())) {
-        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-        if (context.rvalueReadCallback)
-          context.rvalueReadCallback(readOp);
-        return readOp.getResult();
-      }
-      return value;
-    }
+    if (auto value = lookupExpandedInterfaceMember(context, expr))
+      return readIfIsWrapper(context, hierLoc, value);
 
     /// Materialize compile-time constants directly from the symbol: the
     /// generic evaluateConstant refuses hierarchical references unless slang's
@@ -1144,7 +1103,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // Determine the right-hand side value of the assignment.
     context.lvalueStack.push_back(lhs);
     auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+        expr.right(), cast<moore::WrapperType>(lhs.getType()).getNestedType());
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
@@ -2163,7 +2122,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     for (auto &writeback : writebacks) {
       Value rvalue = moore::ReadOp::create(builder, loc, writeback.temp);
       auto dstType =
-          cast<moore::RefType>(writeback.lvalue.getType()).getNestedType();
+          cast<moore::WrapperType>(writeback.lvalue.getType()).getNestedType();
       rvalue = context.materializeConversion(dstType, rvalue,
                                              writeback.declIsSigned, loc);
       if (!rvalue)
@@ -2629,16 +2588,6 @@ struct LvalueExprVisitor : public ExprVisitor {
 
     if (auto access = context.virtualIfaceMembers.lookup(&expr.symbol);
         access.base) {
-      auto type = context.convertType(*expr.type);
-      if (!type)
-        return {};
-      auto memberType = dyn_cast<moore::UnpackedType>(type);
-      if (!memberType) {
-        mlir::emitError(loc)
-            << "unsupported virtual interface member type: " << type;
-        return {};
-      }
-
       Value base = materializeSymbolRvalue(*access.base);
       if (!base) {
         auto d = mlir::emitError(loc, "unknown name `")
@@ -2651,9 +2600,9 @@ struct LvalueExprVisitor : public ExprVisitor {
       auto fieldName = access.fieldName
                            ? access.fieldName
                            : builder.getStringAttr(expr.symbol.name);
-      auto memberRefType = moore::RefType::get(memberType);
-      return moore::StructExtractOp::create(builder, loc, memberRefType,
-                                            fieldName, base);
+      return moore::StructExtractOp::create(
+          builder, loc, getVirtualInterfaceFieldType(base, fieldName),
+          fieldName, base);
     }
 
     auto d = mlir::emitError(loc, "unknown name `") << expr.symbol.name << "`";
@@ -2727,7 +2676,7 @@ struct LvalueExprVisitor : public ExprVisitor {
       if (stream.constantWithWidth.has_value()) {
         value = context.convertLvalueExpression(*stream.withExpr);
         auto type = cast<moore::UnpackedType>(
-            cast<moore::RefType>(value.getType()).getNestedType());
+            cast<moore::WrapperType>(value.getType()).getNestedType());
         auto intType = moore::RefType::get(moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain()));
         // Do not care if it's signed, because we will not do expansion.
@@ -4218,7 +4167,8 @@ Value Context::convertSystemCall(
     auto lvalue = convertLvalueExpression(*valueArg);
     if (!lvalue)
       return {};
-    auto resultType = cast<moore::RefType>(lvalue.getType()).getNestedType();
+    auto resultType =
+        cast<moore::WrapperType>(lvalue.getType()).getNestedType();
     auto foundTy = moore::IntType::getInt(getContext(), 1);
     auto op = moore::PlusArgsValueBIOp::create(
         builder, loc, foundTy, resultType,

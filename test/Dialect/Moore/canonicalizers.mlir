@@ -227,15 +227,15 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   %4 = moore.read %b : ref<i42>
   dbg.variable "b", %4 : !moore.i42
 
-  // Unique continuous assignments to nets should remove the `ref<T>`
+  // Unique continuous assignments to nets should remove the `net<T>`
   // indirection and instead directly propagate the assigned value to readers.
   // CHECK-NOT: moore.assign
   // CHECK-NOT: moore.net wire
   // CHECK: %c = moore.assigned_variable %w : i42
   // CHECK: dbg.variable "c", %c : !moore.i42
-  moore.assign %c, %w : ref<i42>
+  moore.assign %c, %w : net<i42>
   %c = moore.net wire : <i42>
-  %5 = moore.read %c : ref<i42>
+  %5 = moore.read %c : net<i42>
   dbg.variable "c", %5 : !moore.i42
 
   // Variables without names should not create an `assigned_variable`.
@@ -253,9 +253,9 @@ moore.module @OptimizeUniquelyAssignedVars(in %u: !moore.i42, in %v: !moore.i42,
   // CHECK-NOT: moore.net wire
   // CHECK-NOT: moore.assigned_variable
   // CHECK: dbg.variable "e", %v : !moore.i42
-  moore.assign %2, %v : ref<i42>
+  moore.assign %2, %v : net<i42>
   %2 = moore.net wire : <i42>
-  %7 = moore.read %2 : ref<i42>
+  %7 = moore.read %2 : net<i42>
   dbg.variable "e", %7 : !moore.i42
 }
 
@@ -281,9 +281,9 @@ moore.module @DontOptimizeVarsWithMultipleAssigns() {
   // CHECK: [[TMP:%.+]] = moore.read %b
   // CHECK: dbg.variable "b", [[TMP]]
   %b = moore.net wire : <i42>
-  moore.assign %b, %0 : ref<i42>
-  moore.assign %b, %1 : ref<i42>
-  %3 = moore.read %b : ref<i42>
+  moore.assign %b, %0 : net<i42>
+  moore.assign %b, %1 : net<i42>
+  %3 = moore.read %b : net<i42>
   dbg.variable "b", %3 : !moore.i42
 
   // CHECK: %c = moore.net
@@ -291,8 +291,8 @@ moore.module @DontOptimizeVarsWithMultipleAssigns() {
   // CHECK: [[TMP:%.+]] = moore.read %c
   // CHECK: dbg.variable "c", [[TMP]]
   %c = moore.net wire %0 : <i42>
-  moore.assign %c, %1 : ref<i42>
-  %4 = moore.read %c : ref<i42>
+  moore.assign %c, %1 : net<i42>
+  %4 = moore.read %c : net<i42>
   dbg.variable "c", %4 : !moore.i42
 }
 
@@ -311,26 +311,27 @@ moore.module @DontOptimizeVarsWithNonReadUses(in %u: !moore.i42, in %v: !moore.i
 
   // CHECK: %b = moore.net wire %u
   // CHECK: moore.assign %b, %v
-  // CHECK: func.call @useRef(%b)
+  // CHECK: func.call @useNet(%b)
   // CHECK: [[TMP:%.+]] = moore.read %b
   // CHECK: dbg.variable "b", [[TMP]]
   %b = moore.net wire %u : <i42>
-  moore.assign %b, %v : ref<i42>
-  func.call @useRef(%b) : (!moore.ref<i42>) -> ()
-  %3 = moore.read %b : ref<i42>
+  moore.assign %b, %v : net<i42>
+  func.call @useNet(%b) : (!moore.net<i42>) -> ()
+  %3 = moore.read %b : net<i42>
   dbg.variable "b", %3 : !moore.i42
 
   // Unique continuous assigns should be folded into net definitions even if the
   // net has non-read uses.
   // CHECK: %c = moore.net wire %u
   // CHECK-NOT: moore.assign %c
-  // CHECK: func.call @useRef(%c)
+  // CHECK: func.call @useNet(%c)
   %c = moore.net wire : <i42>
-  moore.assign %c, %u : ref<i42>
-  func.call @useRef(%c) : (!moore.ref<i42>) -> ()
+  moore.assign %c, %u : net<i42>
+  func.call @useNet(%c) : (!moore.net<i42>) -> ()
 }
 
 func.func private @useRef(%arg0: !moore.ref<i42>)
+func.func private @useNet(%arg0: !moore.net<i42>)
 
 // CHECK-LABEL: moore.module @DropRedundantVars
 moore.module @DropRedundantVars(in %a : !moore.i42, out b : !moore.i42, out c : !moore.i42) {
@@ -484,6 +485,6 @@ func.func @convertReal(%arg0: !moore.f32) -> !moore.f32 {
 moore.module @SelfAssignNet() {
   // CHECK: %w = moore.assigned_variable %w : l1
   %w = moore.net wire : <l1>
-  %0 = moore.read %w : ref<l1>
-  moore.assign %w, %0 : ref<l1>
+  %0 = moore.read %w : net<l1>
+  moore.assign %w, %0 : net<l1>
 }

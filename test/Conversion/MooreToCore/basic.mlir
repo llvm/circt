@@ -661,52 +661,47 @@ moore.module @Variable() {
 }
 
 // CHECK-LABEL: hw.module @Net
-moore.module @Net() {
-  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
-  // CHECK: %a = llhd.sig [[TMP]] : <i32>
+// CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
+// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>
+// CHECK-SAME: in [[TIME:%.+]] : !llhd.time
+moore.module @Net(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>, in %time : !moore.time) {
+  // CHECK: %a = llhd.net wire : <i32>
   %a = moore.net wire : <i32>
 
-  // CHECK: [[PRB:%.+]] = llhd.prb %a : i32
-  %0 = moore.read %a : ref<i32>
+  // CHECK: [[PRB:%.+]] = llhd.prb_net %a : i32
+  %0 = moore.read %a : net<i32>
 
-  // CHECK: [[TMP:%.+]] = hw.constant 0 : i32
-  // CHECK: %b = llhd.sig [[TMP]] : <i32>
-  // CHECK: llhd.assign %b, [[PRB]] : i32
+  // CHECK: %b = llhd.net wire : <i32>
+  // CHECK: llhd.assign_net %b, [[PRB]] : i32
   %b = moore.net wire %0 : <i32>
 
   // CHECK: [[TMP:%.+]] = hw.constant 10 : i32
   %3 = moore.constant 10 : i32
-  // CHECK: llhd.assign %a, [[TMP]] : i32
-  moore.assign %a, %3 : ref<i32>
-}
+  // CHECK: llhd.assign_net %a, [[TMP]] : i32
+  moore.assign %a, %3 : net<i32>
 
-// FIXME: this can be merged with the above once moore.net ops emit moore.net
-// types
-// CHECK-LABEL: hw.module @NetType
-// CHECK-SAME: in [[I1NET:%.+]] : !llhd.net<i1>
-// CHECK-SAME: in [[STRUCTNET:%.+]] : !llhd.net<!hw.struct<a: i8, b: i8>>
-// CHECK-SAME: in [[TIME:%.+]] : !llhd.time
-moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.net<struct<{a: i8, b: i8}>>, in %time : !moore.time) {
   // CHECK: [[C0_I1:%.+]] = hw.constant false
   %c0_i1 = moore.constant 0 : i1
   %c0_i8 = moore.constant 0 : i8
   // CHECK: llhd.prb_net [[I1NET]] : i1
-  %0 = moore.read %i1net : net<i1>
+  %4 = moore.read %i1net : net<i1>
   // CHECK: llhd.prb_net [[STRUCTNET]] : !hw.struct<a: i8, b: i8>
-  %1 = moore.read %structnet : net<struct<{a: i8, b: i8}>>
+  %5 = moore.read %structnet : net<struct<{a: i8, b: i8}>>
   // CHECK: llhd.assign_net [[I1NET]], {{%.+}} : i1
   moore.assign %i1net, %c0_i1 : net<i1>
   // CHECK: llhd.assign_net [[STRUCTNET]], {{%.+}} : !hw.struct<a: i8, b: i8>
-  %2 = moore.struct_create %c0_i8, %c0_i8 : !moore.i8, !moore.i8 -> struct<{a: i8, b: i8}>
-  moore.assign %structnet, %2 : net<struct<{a: i8, b: i8}>>
+  %6 = moore.struct_create %c0_i8, %c0_i8 : !moore.i8, !moore.i8 -> struct<{a: i8, b: i8}>
+  moore.assign %structnet, %6 : net<struct<{a: i8, b: i8}>>
   // CHECK: [[DELAYED:%.+]] = llhd.delay [[C0_I1]] by [[TIME]]
   // CHECK: llhd.assign_net [[I1NET]], [[DELAYED]] : i1
   moore.delayed_assign %i1net, %c0_i1, %time : net<i1>
 }
 
 // CHECK-LABEL: hw.module @WaitEventObservesNet
-moore.module @WaitEventObservesNet(in %a : !moore.net<i1>) {
-  // CHECK: [[PRB:%.+]] = llhd.prb_net %a : i1
+moore.module @WaitEventObservesNet() {
+  // CHECK: %a = llhd.net wire : <i1>
+  // CHECK-NEXT: [[PRB:%.+]] = llhd.prb_net %a : i1
+  %a = moore.net wire : <i1>
   // CHECK: llhd.process {
   moore.procedure initial {
     // CHECK: llhd.wait ([[PRB]] : i1)
@@ -2323,115 +2318,103 @@ moore.module @GlobalFooUse() {
 
 // CHECK-LABEL: @Nets
 moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, out o4 : !moore.l2, out o5 : !moore.l1, out o6 : !moore.l2, out o7 : !moore.l1, out o8 : !moore.l2, out o9 : !moore.l1, out o10 : !moore.l2, out o11 : !moore.l1, out o12 : !moore.l2, out o13 : !moore.l1, out o14 : !moore.l2, out o15 : !moore.l1, out o16 : !moore.l2, out o17 : !moore.l1, out o18 : !moore.l2, out o19 : !moore.l1, out o20 : !moore.l2, out o21 : !moore.l1, out o22 : !moore.l2, out o23 : !moore.l1, out o24 : !moore.l2) {
-  // CHECK: [[N1:%.*]] = llhd.sig %false : <i1>
+  // CHECK: [[N1:%.*]] = llhd.net wire : <i1>
   %n1 = moore.net wire : <l1>
-  // CHECK: [[C0:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N2:%.*]] = llhd.sig [[C0]] : <i2>
+  // CHECK: [[N2:%.*]] = llhd.net wire : <i2>
   %n2 = moore.net wire : <l2>
-  // CHECK: [[N3:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N3:%.*]] = llhd.net tri : <i1>
   %n3 = moore.net tri : <l1>
-  // CHECK: [[C0_1:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N4:%.*]] = llhd.sig [[C0_1]] : <i2>
+  // CHECK: [[N4:%.*]] = llhd.net tri : <i2>
   %n4 = moore.net tri : <l2>
-  // CHECK: [[N5:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N5:%.*]] = llhd.net uwire : <i1>
   %n5 = moore.net uwire : <l1>
-  // CHECK: [[C0_2:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N6:%.*]] = llhd.sig [[C0_2]] : <i2>
+  // CHECK: [[N6:%.*]] = llhd.net uwire : <i2>
   %n6 = moore.net uwire : <l2>
-  // CHECK: [[N7:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N7:%.*]] = llhd.net supply0 : <i1>
   %n7 = moore.net supply0 : <l1>
-  // CHECK: [[C0_3:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N8:%.*]] = llhd.sig [[C0_3]] : <i2>
+  // CHECK: [[N8:%.*]] = llhd.net supply0 : <i2>
   %n8 = moore.net supply0 : <l2>
-  // CHECK: [[N9:%.*]] = llhd.sig %true : <i1>
+  // CHECK: [[N9:%.*]] = llhd.net supply1 : <i1>
   %n9 = moore.net supply1 : <l1>
-  // CHECK: [[C1:%.*]] = hw.constant -1 : i2
-  // CHECK-NEXT: [[N10:%.*]] = llhd.sig [[C1]] : <i2>
+  // CHECK: [[N10:%.*]] = llhd.net supply1 : <i2>
   %n10 = moore.net supply1 : <l2>
-  // CHECK: [[N11:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N11:%.*]] = llhd.net tri0 : <i1>
   %n11 = moore.net tri0 : <l1>
-  // CHECK: [[C0_4:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N12:%.*]] = llhd.sig [[C0_4]] : <i2>
+  // CHECK: [[N12:%.*]] = llhd.net tri0 : <i2>
   %n12 = moore.net tri0 : <l2>
-  // CHECK: [[N13:%.*]] = llhd.sig %true{{.*}} : <i1>
+  // CHECK: [[N13:%.*]] = llhd.net tri1 : <i1>
   %n13 = moore.net tri1 : <l1>
-  // CHECK: [[C1_1:%.*]] = hw.constant -1 : i2
-  // CHECK-NEXT: [[N14:%.*]] = llhd.sig [[C1_1]] : <i2>
+  // CHECK: [[N14:%.*]] = llhd.net tri1 : <i2>
   %n14 = moore.net tri1 : <l2>
-  // CHECK: [[N15:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N15:%.*]] = llhd.net wand : <i1>
   %n15 = moore.net wand : <l1>
-  // CHECK: [[C0_5:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N16:%.*]] = llhd.sig [[C0_5]] : <i2>
+  // CHECK: [[N16:%.*]] = llhd.net wand : <i2>
   %n16 = moore.net wand : <l2>
-  // CHECK: [[N17:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N17:%.*]] = llhd.net triand : <i1>
   %n17 = moore.net triand : <l1>
-  // CHECK: [[C0_6:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N18:%.*]] = llhd.sig [[C0_6]] : <i2>
+  // CHECK: [[N18:%.*]] = llhd.net triand : <i2>
   %n18 = moore.net triand : <l2>
-  // CHECK: [[N19:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N19:%.*]] = llhd.net wor : <i1>
   %n19 = moore.net wor : <l1>
-  // CHECK: [[C0_7:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N20:%.*]] = llhd.sig [[C0_7]] : <i2>
+  // CHECK: [[N20:%.*]] = llhd.net wor : <i2>
   %n20 = moore.net wor : <l2>
-  // CHECK: [[N21:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N21:%.*]] = llhd.net trior : <i1>
   %n21 = moore.net trior : <l1>
-  // CHECK: [[C0_8:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N22:%.*]] = llhd.sig [[C0_8]] : <i2>
+  // CHECK: [[N22:%.*]] = llhd.net trior : <i2>
   %n22 = moore.net trior : <l2>
-  // CHECK: [[N23:%.*]] = llhd.sig %false{{.*}} : <i1>
+  // CHECK: [[N23:%.*]] = llhd.net trireg : <i1>
   %n23 = moore.net trireg : <l1>
-  // CHECK: [[C0_9:%.*]] = hw.constant 0 : i2
-  // CHECK-NEXT: [[N24:%.*]] = llhd.sig [[C0_9]] : <i2>
+  // CHECK: [[N24:%.*]] = llhd.net trireg : <i2>
   %n24 = moore.net trireg : <l2>
 
-  // CHECK: llhd.prb [[N1]] : i1
-  %0 = moore.read %n1 : ref<l1>
-  // CHECK: llhd.prb [[N2]] : i2
-  %1 = moore.read %n2 : ref<l2>
-  // CHECK: llhd.prb [[N3]] : i1
-  %2 = moore.read %n3 : ref<l1>
-  // CHECK: llhd.prb [[N4]] : i2
-  %3 = moore.read %n4 : ref<l2>
-  // CHECK: llhd.prb [[N5]] : i1
-  %4 = moore.read %n5 : ref<l1>
-  // CHECK: llhd.prb [[N6]] : i2
-  %5 = moore.read %n6 : ref<l2>
-  // CHECK: llhd.prb [[N7]] : i1
-  %6 = moore.read %n7 : ref<l1>
-  // CHECK: llhd.prb [[N8]] : i2
-  %7 = moore.read %n8 : ref<l2>
-  // CHECK: llhd.prb [[N9]] : i1
-  %8 = moore.read %n9 : ref<l1>
-  // CHECK: llhd.prb [[N10]] : i2
-  %9 = moore.read %n10 : ref<l2>
-  // CHECK: llhd.prb [[N11]] : i1
-  %10 = moore.read %n11 : ref<l1>
-  // CHECK: llhd.prb [[N12]] : i2
-  %11 = moore.read %n12 : ref<l2>
-  // CHECK: llhd.prb [[N13]] : i1
-  %12 = moore.read %n13 : ref<l1>
-  // CHECK: llhd.prb [[N14]] : i2
-  %13 = moore.read %n14 : ref<l2>
-  // CHECK: llhd.prb [[N15]] : i1
-  %14 = moore.read %n15 : ref<l1>
-  // CHECK: llhd.prb [[N16]] : i2
-  %15 = moore.read %n16 : ref<l2>
-  // CHECK: llhd.prb [[N17]] : i1
-  %16 = moore.read %n17 : ref<l1>
-  // CHECK: llhd.prb [[N18]] : i2
-  %17 = moore.read %n18 : ref<l2>
-  // CHECK: llhd.prb [[N19]] : i1
-  %18 = moore.read %n19 : ref<l1>
-  // CHECK: llhd.prb [[N20]] : i2
-  %19 = moore.read %n20 : ref<l2>
-  // CHECK: llhd.prb [[N21]] : i1
-  %20 = moore.read %n21 : ref<l1>
-  // CHECK: llhd.prb [[N22]] : i2
-  %21 = moore.read %n22 : ref<l2>
-  // CHECK: llhd.prb [[N23]] : i1
-  %22 = moore.read %n23 : ref<l1>
-  // CHECK: llhd.prb [[N24]] : i2
-  %23 = moore.read %n24 : ref<l2>
+  // CHECK: llhd.prb_net [[N1]] : i1
+  %0 = moore.read %n1 : net<l1>
+  // CHECK: llhd.prb_net [[N2]] : i2
+  %1 = moore.read %n2 : net<l2>
+  // CHECK: llhd.prb_net [[N3]] : i1
+  %2 = moore.read %n3 : net<l1>
+  // CHECK: llhd.prb_net [[N4]] : i2
+  %3 = moore.read %n4 : net<l2>
+  // CHECK: llhd.prb_net [[N5]] : i1
+  %4 = moore.read %n5 : net<l1>
+  // CHECK: llhd.prb_net [[N6]] : i2
+  %5 = moore.read %n6 : net<l2>
+  // CHECK: llhd.prb_net [[N7]] : i1
+  %6 = moore.read %n7 : net<l1>
+  // CHECK: llhd.prb_net [[N8]] : i2
+  %7 = moore.read %n8 : net<l2>
+  // CHECK: llhd.prb_net [[N9]] : i1
+  %8 = moore.read %n9 : net<l1>
+  // CHECK: llhd.prb_net [[N10]] : i2
+  %9 = moore.read %n10 : net<l2>
+  // CHECK: llhd.prb_net [[N11]] : i1
+  %10 = moore.read %n11 : net<l1>
+  // CHECK: llhd.prb_net [[N12]] : i2
+  %11 = moore.read %n12 : net<l2>
+  // CHECK: llhd.prb_net [[N13]] : i1
+  %12 = moore.read %n13 : net<l1>
+  // CHECK: llhd.prb_net [[N14]] : i2
+  %13 = moore.read %n14 : net<l2>
+  // CHECK: llhd.prb_net [[N15]] : i1
+  %14 = moore.read %n15 : net<l1>
+  // CHECK: llhd.prb_net [[N16]] : i2
+  %15 = moore.read %n16 : net<l2>
+  // CHECK: llhd.prb_net [[N17]] : i1
+  %16 = moore.read %n17 : net<l1>
+  // CHECK: llhd.prb_net [[N18]] : i2
+  %17 = moore.read %n18 : net<l2>
+  // CHECK: llhd.prb_net [[N19]] : i1
+  %18 = moore.read %n19 : net<l1>
+  // CHECK: llhd.prb_net [[N20]] : i2
+  %19 = moore.read %n20 : net<l2>
+  // CHECK: llhd.prb_net [[N21]] : i1
+  %20 = moore.read %n21 : net<l1>
+  // CHECK: llhd.prb_net [[N22]] : i2
+  %21 = moore.read %n22 : net<l2>
+  // CHECK: llhd.prb_net [[N23]] : i1
+  %22 = moore.read %n23 : net<l1>
+  // CHECK: llhd.prb_net [[N24]] : i2
+  %23 = moore.read %n24 : net<l2>
 
   moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
 }

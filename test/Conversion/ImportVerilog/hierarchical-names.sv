@@ -116,3 +116,37 @@ endmodule
 module SubF;
   logic [7:0] x;
 endmodule
+
+// -----
+
+// Hierarchical references to nets keep the net type.
+// CHECK-LABEL: moore.module @NetUp()
+// CHECK: [[INSTRES:%.+]] = moore.instance "subG" @SubG() -> (n: !moore.net<l8>)
+// CHECK: moore.read [[INSTRES]] : net<l8>
+module NetUp;
+  SubG subG();
+  logic [7:0] a;
+  assign a = subG.n;
+endmodule
+
+// CHECK-LABEL: moore.module private @SubG(out n : !moore.net<l8>)
+// CHECK: [[NET:%.+]] = moore.net wire : <l8>
+// CHECK: moore.output [[NET]] : !moore.net<l8>
+module SubG;
+  wire [7:0] n;
+endmodule
+
+// CHECK-LABEL: moore.module @NetDown()
+// CHECK: [[W:%.+]] = moore.net wire : <l8>
+// CHECK: moore.instance "subH" @SubH(NetDown.w: [[W]]: !moore.net<l8>) -> ()
+module NetDown;
+  wire [7:0] w;
+  SubH subH();
+endmodule
+
+// CHECK-LABEL: moore.module private @SubH(in %NetDown.w : !moore.net<l8>)
+// CHECK: moore.read %NetDown.w : net<l8>
+module SubH;
+  logic [7:0] b;
+  assign b = NetDown.w;
+endmodule

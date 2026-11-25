@@ -18,8 +18,10 @@ module InterfaceContinuousAssign(input logic clkA, input logic clkB,
   assign yA = a.seen;
   assign yB = b.seen;
 
-  // CHECK: %[[A_SEEN:.+]] = moore.assigned_variable %[[CLKA]] : l1
-  // CHECK: %[[B_SEEN:.+]] = moore.assigned_variable %[[CLKB]] : l1
+  // CHECK: %[[A_CLK:.+]] = moore.assigned_variable %[[CLKA]] : l1
+  // CHECK: %[[A_SEEN:.+]] = moore.assigned_variable %[[A_CLK]] : l1
+  // CHECK: %[[B_CLK:.+]] = moore.assigned_variable %[[CLKB]] : l1
+  // CHECK: %[[B_SEEN:.+]] = moore.assigned_variable %[[B_CLK]] : l1
   // CHECK: moore.output %[[A_SEEN]], %[[B_SEEN]] : !moore.l1, !moore.l1
 endmodule
 
@@ -34,14 +36,14 @@ module InterfaceProceduralAssign(input logic clk, output logic y);
   sample_if vif(clk);
   assign y = vif.sampled;
 
-  // CHECK: %[[INNER_CLK:.+]] = moore.net name "clk" wire : <l1>
+  // CHECK: %[[INNER_CLK:.+]] = moore.net wire : <l1>
   // CHECK: %[[SAMPLED:.+]] = moore.variable : <l1>
+  // CHECK: moore.assign %[[INNER_CLK]], %[[CLK]] : net<l1>
   // CHECK: moore.procedure always_comb {
-  // CHECK:   %[[CLK_READ:.+]] = moore.read %[[INNER_CLK]] : ref<l1>
+  // CHECK:   %[[CLK_READ:.+]] = moore.read %[[INNER_CLK]] : net<l1>
   // CHECK:   moore.blocking_assign %[[SAMPLED]], %[[CLK_READ]] : l1
   // CHECK:   moore.return
   // CHECK: }
   // CHECK: %[[SAMPLED_READ:.+]] = moore.read %[[SAMPLED]] : ref<l1>
-  // CHECK: moore.assign %[[INNER_CLK]], %[[CLK]] : ref<l1>
   // CHECK: moore.output %[[SAMPLED_READ]] : !moore.l1
 endmodule

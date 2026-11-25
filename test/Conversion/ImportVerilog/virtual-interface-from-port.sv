@@ -24,7 +24,7 @@ class consumer;
   endfunction
 endclass
 
-// CHECK-LABEL: moore.module private @top(in %out_clk : !moore.ref<l1>, in %out_data : !moore.ref<l8>)
+// CHECK-LABEL: moore.module private @top(in %out_clk : !moore.net<l1>, in %out_data : !moore.ref<l8>)
 module top
     (output_if out);
   consumer c;

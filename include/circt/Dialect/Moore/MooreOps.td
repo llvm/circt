@@ -415,7 +415,7 @@ def NetKindAttr : I32EnumAttr<"NetKind", "Net type kind", [
 def NetOp : MooreOp<"net", [
   DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
   OptionalTypesMatchWith<"assigned value and variable types match",
-    "result", "assignment", "cast<RefType>($_self).getNestedType()">,
+    "result", "assignment", "cast<NetType>($_self).getNestedType()">,
 ]> {
   let summary = "A net declaration";
   let description = [{
@@ -439,7 +439,7 @@ def NetOp : MooreOp<"net", [
     NetKindAttr:$kind,
     Optional<UnpackedType>:$assignment
   );
-  let results = (outs Res<RefType, "", [MemAlloc]>:$result);
+  let results = (outs Res<NetType, "", [MemAlloc]>:$result);
   let assemblyFormat = [{
     `` custom<ImplicitSSAName>($name) $kind ($assignment^)? attr-dict
     `:` type($result)

@@ -50,7 +50,7 @@ moore.module @Module() {
   // CHECK: %w0 = moore.net wire : <l1>
   %w0 = moore.net wire : <l1>
   // CHECK: %[[W0:.+]] = moore.read %w0
-  %1 = moore.read %w0 : ref<l1>
+  %1 = moore.read %w0 : net<l1>
   // CHECK: %w1 = moore.net wire %[[W0]] : <l1>
   %w1 = moore.net wire %1 : <l1>
   // CHECK: %w2 = moore.net uwire %[[W0]] : <l1>
