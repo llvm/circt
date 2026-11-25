@@ -482,6 +482,11 @@ static void getValuesToObserve(Region *region,
         return {};
       return llhd::ProbeOp::create(rewriter, loc, value);
     }
+    if (auto netType = dyn_cast<llhd::NetType>(type)) {
+      if (!hw::isHWValueType(netType.getNestedType()))
+        return {};
+      return llhd::ProbeNetOp::create(rewriter, loc, value);
+    }
     if (!hw::isHWValueType(type))
       return {};
     return value;

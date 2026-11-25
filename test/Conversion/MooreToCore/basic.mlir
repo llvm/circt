@@ -704,6 +704,20 @@ moore.module @NetType(in %i1net : !moore.net<!moore.i1>, in %structnet : !moore.
   moore.delayed_assign %i1net, %c0_i1, %time : net<i1>
 }
 
+// CHECK-LABEL: hw.module @WaitEventObservesNet
+moore.module @WaitEventObservesNet(in %a : !moore.net<i1>) {
+  // CHECK: [[PRB:%.+]] = llhd.prb_net %a : i1
+  // CHECK: llhd.process {
+  moore.procedure initial {
+    // CHECK: llhd.wait ([[PRB]] : i1)
+    moore.wait_event {
+      %0 = moore.read %a : net<i1>
+      moore.detect_event any %0 : i1
+    }
+    moore.return
+  }
+}
+
 // CHECK-LABEL: hw.module @UnpackedArray
 moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i1, out c : !moore.i32) {
   // CHECK: hw.array_get %arr[%sel] : !hw.array<2xi32>, i1
