@@ -46,7 +46,7 @@ struct Option {
   explicit Option(OMEvaluatorValue value) : value(value) {}
 
   static Option getEmpty(MlirType type);
-  static Option getSome(MlirType type, nb::object payload);
+  static Option getSome(MlirType type, const nb::object &payload);
 
   MlirType getType() const { return omEvaluatorValueGetType(value); }
   bool hasValue() const { return omEvaluatorOptionHasValue(value); }
@@ -398,13 +398,6 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   return omPrimitiveToPythonValue(omEvaluatorValueGetPrimitive(result));
 }
 
-nb::object Option::getPayload() const {
-  if (!hasValue())
-    throw nb::value_error("Cannot get the value of an empty OM option");
-  return nb::cast(
-      omEvaluatorValueToPythonValue(omEvaluatorOptionGetValue(value)));
-}
-
 OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
                                                MlirContext ctx) {
   if (std::holds_alternative<std::monostate>(result))
@@ -434,13 +427,22 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
       omPythonValueToPrimitive(primitive, ctx));
 }
 
+} // namespace
+
+nb::object Option::getPayload() const {
+  if (!hasValue())
+    throw nb::value_error("Cannot get the value of an empty OM option");
+  return nb::cast(
+      omEvaluatorValueToPythonValue(omEvaluatorOptionGetValue(value)));
+}
+
 Option Option::getEmpty(MlirType type) {
   if (!omTypeIsAOptionType(type))
     throw nb::type_error("Expected an OM OptionType");
   return Option(omEvaluatorOptionGetEmpty(type));
 }
 
-Option Option::getSome(MlirType type, nb::object payload) {
+Option Option::getSome(MlirType type, const nb::object &payload) {
   if (!omTypeIsAOptionType(type))
     throw nb::type_error("Expected an OM OptionType");
   auto ctx = mlirTypeGetContext(type);
@@ -456,8 +458,6 @@ Option Option::getSome(MlirType type, nb::object payload) {
         "OM option payload type does not match the option's element type");
   return Option(omEvaluatorOptionGet(type, value));
 }
-
-} // namespace
 
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
