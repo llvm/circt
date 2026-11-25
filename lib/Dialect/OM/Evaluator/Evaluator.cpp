@@ -115,6 +115,9 @@ private:
   /// Import a fully evaluated list as a list or registry allocation.
   FailureOr<Value> materializeContainerInput(evaluator::ListValue *listValue,
                                              Location loc, Type type);
+  /// Convert a fully evaluated option into scratch IR.
+  FailureOr<Value> materializeOptionInput(evaluator::OptionValue *optionValue,
+                                          Location loc);
   /// Convert a fully evaluated object value into scratch IR.
   FailureOr<Value> materializeObjectInput(evaluator::ObjectValue *objectValue,
                                           Location loc);
@@ -265,6 +268,13 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
           importedValues[key] = *result;
         return result;
       })
+      // NOLINTNEXTLINE(misc-no-recursion)
+      .Case([&](evaluator::OptionValue *optionValue) -> FailureOr<Value> {
+        auto result = materializeOptionInput(optionValue, loc);
+        if (succeeded(result))
+          importedValues[key] = *result;
+        return result;
+      })
       .Default([&](evaluator::EvaluatorValue *) -> FailureOr<Value> {
         auto result = createWrapperArgument(value, loc, expectedType);
         if (succeeded(result))
@@ -297,6 +307,28 @@ ScratchIRBuilder::materializeContainerInput(evaluator::ListValue *listValue,
         .getResult();
 
   auto result = ListCreateOp::create(builder, loc, listType, elementValues);
+  return result.getResult();
+}
+
+FailureOr<Value>
+// NOLINTNEXTLINE(misc-no-recursion,llvm-prefer-static-over-anonymous-namespace)
+ScratchIRBuilder::materializeOptionInput(evaluator::OptionValue *optionValue,
+                                         Location loc) {
+  if (!optionValue->isFullyEvaluated())
+    return emitError(loc, "cannot import partially evaluated OM option value");
+
+  auto optionType = optionValue->getOptionType();
+  Value payload;
+  if (optionValue->hasValue()) {
+    auto materialized = materializeInput(optionValue->getValue(), loc,
+                                         optionType.getElementType());
+    if (failed(materialized))
+      return failure();
+    payload = *materialized;
+  }
+
+  OpBuilder builder(wrapperClass.getFieldsOp());
+  auto result = OptionCreateOp::create(builder, loc, optionType, payload);
   return result.getResult();
 }
 
@@ -371,6 +403,7 @@ Type circt::om::evaluator::EvaluatorValue::getType() const {
       .Case<AttributeValue>([](auto *attr) -> Type { return attr->getType(); })
       .Case<ObjectValue>([](auto *object) { return object->getObjectType(); })
       .Case<ListValue>([](auto *list) { return list->getListType(); })
+      .Case([](const OptionValue *option) { return option->getOptionType(); })
       .Case<BasePathValue>(
           [this](auto *tuple) { return FrozenBasePathType::get(ctx); })
       .Case<PathValue>(
@@ -387,6 +420,11 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
           .Case([&](circt::om::ListType type) {
             evaluator::EvaluatorValuePtr result =
                 std::make_shared<evaluator::ListValue>(type, loc);
+            return success(result);
+          })
+          .Case([&](circt::om::OptionType type) {
+            evaluator::EvaluatorValuePtr result =
+                std::make_shared<evaluator::OptionValue>(type, loc);
             return success(result);
           })
           .Case([&](circt::om::ClassType type)
@@ -459,10 +497,10 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<RegistryCreateOp, ListCreateOp, ListConcatOp>(
-                    [&](auto op) {
-                      return getPartiallyEvaluatedValue(op.getType(), loc);
-                    })
+                .Case<RegistryCreateOp, ListCreateOp, ListConcatOp,
+                      OptionCreateOp>([&](auto op) {
+                  return getPartiallyEvaluatedValue(op.getType(), loc);
+                })
                 .Case<ElaboratedObjectOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), op.getLoc());
                 })
@@ -672,6 +710,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
             })
+            .Case([&](OptionCreateOp op) {
+              return evaluateOptionCreate(op, actualParams, loc);
+            })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
             })
@@ -831,6 +872,27 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
   return list;
 }
 
+FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateOptionCreate(
+    OptionCreateOp op, ActualParameters actualParams, Location loc) {
+  auto result = getOrCreateValue(op, actualParams, loc);
+  if (failed(result))
+    return failure();
+  auto *option = cast<evaluator::OptionValue>(result.value().get());
+  if (option->isFullyEvaluated())
+    return result;
+
+  EvaluatorValuePtr payload;
+  if (auto value = op.getValue()) {
+    // Reuse the payload's placeholder to allow forward references and cycles.
+    auto valueResult = getOrCreateValue(value, actualParams, loc);
+    if (failed(valueResult))
+      return failure();
+    payload = *valueResult;
+  }
+  option->setValue(std::move(payload));
+  return result;
+}
+
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateBasePathCreate(FrozenBasePathCreateOp op,
                                              ActualParameters actualParams,
@@ -896,6 +958,9 @@ circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));
+          })
+          .Case([&](OptionType type) -> FailureOr<EvaluatorValuePtr> {
+            return success(std::make_shared<OptionValue>(type, loc));
           })
           .Case([&](ClassType type) -> FailureOr<EvaluatorValuePtr> {
             // Look up the class definition
@@ -1106,10 +1171,12 @@ circt::om::evaluator::AttributeValue::get(Type type, LocationAttr loc) {
   if (!loc)
     loc = UnknownLoc::get(context);
 
-  // Special handling for ListType and RegistryType to create proper ListValue
-  // objects instead of AttributeValue objects.
+  // Lists, registries, and options use container values rather than
+  // AttributeValue. Registries are represented as lists at runtime.
   if (auto listType = dyn_cast<ListType>(getRuntimeType(type)))
     return std::make_shared<evaluator::ListValue>(listType, loc);
+  if (auto optionType = dyn_cast<circt::om::OptionType>(type))
+    return std::make_shared<evaluator::OptionValue>(optionType, loc);
   // Create the AttributeValue with the private tag
   return std::shared_ptr<AttributeValue>(
       new AttributeValue(PrivateTag{}, type, loc));
