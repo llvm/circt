@@ -21,9 +21,6 @@ if TYPE_CHECKING:
 
 # Wrap a base mlir object with high-level object.
 def wrap_mlir_object(value):
-  if isinstance(value, BaseOption):
-    return Option(value)
-
   # For primitives, return the Python value directly.
   if isinstance(value, (int, float, str, bool, tuple, list, dict)):
     return value
@@ -39,6 +36,9 @@ def wrap_mlir_object(value):
 
   if isinstance(value, Path):
     return value
+
+  if isinstance(value, BaseOption):
+    return Option(value)
 
   # For objects, return an Object, wrapping the base implementation.
   assert isinstance(value, BaseObject)
