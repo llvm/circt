@@ -76,8 +76,11 @@ class Option(BaseOption):
   """An OM value that may be empty.
 
   Use ``Option.empty(option_type)`` to create an empty option or
-  ``Option.some(option_type, value)`` to create one with a value. Both take
-  an ``OptionType``.
+  ``Option.some(value)`` to create one with a value.
+
+  ``Option.some`` infers the option type from the value. Pass ``context`` to
+  select a context explicitly. If omitted or ``None``, it uses the context
+  active in a ``with Context():`` block.
 
   Check ``has_value`` before reading ``value``. Reading an empty option's
   value raises ``ValueError``. Use ``Unknown(option_type)`` for an unknown option.
@@ -88,8 +91,8 @@ class Option(BaseOption):
     return Option(BaseOption.empty(option_type))
 
   @staticmethod
-  def some(option_type: OptionType, value: Any) -> "Option":
-    return Option(BaseOption.some(option_type, unwrap_python_object(value)))
+  def some(value: Any, context=None) -> "Option":
+    return Option(BaseOption.some(unwrap_python_object(value), context))
 
   @property
   def value(self):

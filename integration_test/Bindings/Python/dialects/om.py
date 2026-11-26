@@ -449,7 +449,7 @@ with Context() as ctx:
 
   # Test option construction and evaluator arguments, including returned values.
   empty = om.Option.empty(option_type)
-  present = om.Option.some(option_type, 42)
+  present = om.Option.some(42)
   assert isinstance(empty, om.Option)
   assert isinstance(present, om.Option)
   assert not evaluator.instantiate("EchoOption", empty).option.has_value
@@ -461,13 +461,6 @@ with Context() as ctx:
     assert False, "empty option payload was accessible"
   except ValueError as e:
     # CHECK: Cannot get the value of an empty OM option
-    print(e)
-
-  try:
-    om.Option.some(option_type, "wrong")
-    assert False, "mismatched option payload was accepted"
-  except TypeError as e:
-    # CHECK: OM option payload type does not match the option's element type
     print(e)
 
   try:

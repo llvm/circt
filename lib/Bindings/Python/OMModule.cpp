@@ -46,7 +46,7 @@ struct Option {
   explicit Option(OMEvaluatorValue value) : value(value) {}
 
   static Option getEmpty(MlirType type);
-  static Option getSome(MlirType type, const nb::object &payload);
+  static Option getSome(const nb::object &payload, MlirContext ctx);
 
   MlirType getType() const { return omEvaluatorValueGetType(value); }
   bool hasValue() const { return omEvaluatorOptionHasValue(value); }
@@ -442,20 +442,13 @@ Option Option::getEmpty(MlirType type) {
   return Option(omEvaluatorOptionGetEmpty(type));
 }
 
-Option Option::getSome(MlirType type, const nb::object &payload) {
-  if (!omTypeIsAOptionType(type))
-    throw nb::type_error("Expected an OM OptionType");
-  auto ctx = mlirTypeGetContext(type);
+Option Option::getSome(const nb::object &payload, MlirContext ctx) {
   auto value =
       pythonValueToOMEvaluatorValue(nb::cast<PythonValue>(payload), ctx);
   if (!mlirContextEqual(ctx, omEvaluatorValueGetContext(value)))
     throw nb::type_error(
-        "OM option and payload must belong to the same context");
-  auto elementType = omOptionTypeGetElementType(type);
-  if (!omTypeIsAAnyType(elementType) &&
-      !mlirTypeEqual(elementType, omEvaluatorValueGetType(value)))
-    throw nb::type_error(
-        "OM option payload type does not match the option's element type");
+        "OM option payload must belong to the supplied context");
+  auto type = omOptionTypeGet(omEvaluatorValueGetType(value));
   return Option(omEvaluatorOptionGet(type, value));
 }
 
@@ -475,8 +468,8 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   nb::class_<Option>(m, "Option")
       .def(nb::init<Option>(), nb::arg("option"))
       .def_static("empty", &Option::getEmpty, nb::arg("type"))
-      .def_static("some", &Option::getSome, nb::arg("type"),
-                  nb::arg("value").none())
+      .def_static("some", &Option::getSome, nb::arg("value").none(),
+                  nb::arg("context") = nb::none())
       .def_prop_ro("type", &Option::getType)
       .def_prop_ro("has_value", &Option::hasValue)
       .def_prop_ro("value", &Option::getPayload);
