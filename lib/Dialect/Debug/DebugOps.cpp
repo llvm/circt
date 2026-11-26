@@ -14,6 +14,90 @@ using namespace circt;
 using namespace debug;
 using namespace mlir;
 
+/// Check that `ext` maps language names to strings.
+static LogicalResult verifyExt(Operation *op, DictionaryAttr ext) {
+  if (!ext)
+    return success();
+
+  for (auto entry : ext) {
+    auto lang = entry.getName().getValue();
+    if (!isExtLanguage(lang))
+      return op->emitOpError("ext key '")
+             << lang << "' is not a lowercase language name";
+
+    auto json = dyn_cast<StringAttr>(entry.getValue());
+    if (!json)
+      return op->emitOpError("ext value of '") << lang << "' must be a string";
+  }
+
+  return success();
+}
+
+/// Check the type of each discardable attribute in `DebugDialect.td`.
+LogicalResult DebugDialect::verifyOperationAttribute(Operation *op,
+                                                     NamedAttribute attr) {
+  auto name = attr.getName().getValue();
+  auto value = attr.getValue();
+
+  if (name == kDbgMergedFromAttr) {
+    if (!isa<StringAttr>(value))
+      return op->emitOpError("'") << name << "' must be a string";
+    return success();
+  }
+
+  if (name == kDbgLoweredAttr || name == kDbgArtificialAttr ||
+      name == kDbgMemoryAttr) {
+    if (!isa<UnitAttr>(value))
+      return op->emitOpError("'") << name << "' must be a unit attribute";
+    return success();
+  }
+
+  if (name == kDbgModuleLocsAttr) {
+    auto locs = dyn_cast<DictionaryAttr>(value);
+    if (!locs || !llvm::all_of(locs, [](NamedAttribute entry) {
+          return isa<LocationAttr>(entry.getValue());
+        }))
+      return op->emitOpError("'")
+             << name << "' must map module names to locations";
+    return success();
+  }
+
+  if (name == kDbgInstanceAttr) {
+    auto entries = dyn_cast<ArrayAttr>(value);
+    if (!entries || !llvm::all_of(entries, llvm::IsaPred<InstanceAttr>))
+      return op->emitOpError("'")
+             << name << "' must be a list of #dbg.instance";
+    for (auto inst : entries.getAsRange<InstanceAttr>()) {
+      if (auto path = inst.getPath();
+          path && !llvm::all_of(path, llvm::IsaPred<StringAttr>))
+        return op->emitOpError("'") << name << "' path must hold strings";
+      if (failed(verifyExt(op, inst.getExt())))
+        return failure();
+    }
+    return success();
+  }
+
+  if (name != kDbgModuleInfoAttr)
+    return op->emitOpError("has unknown attribute '") << name << "'";
+
+  auto info = dyn_cast<DictionaryAttr>(value);
+  if (!info)
+    return op->emitOpError("'")
+           << kDbgModuleInfoAttr << "' must be a dictionary";
+
+  auto infoName = info.get("name");
+  if (infoName && !isa<StringAttr>(infoName))
+    return op->emitOpError("'")
+           << kDbgModuleInfoAttr << "' name must be a string";
+
+  auto ext = info.get("ext");
+  if (ext && !isa<DictionaryAttr>(ext))
+    return op->emitOpError("'")
+           << kDbgModuleInfoAttr << "' ext must be a dictionary";
+
+  return verifyExt(op, cast_if_present<DictionaryAttr>(ext));
+}
+
 //===----------------------------------------------------------------------===//
 // StructOp
 //===----------------------------------------------------------------------===//
@@ -79,6 +163,21 @@ void StructOp::print(OpAsmPrinter &printer) {
   }
 }
 
+LogicalResult StructOp::verify() {
+  auto flips = getFlips();
+  if (!flips)
+    return success();
+
+  if (flips->size() != getFields().size())
+    return emitOpError("has ")
+           << flips->size() << " flips for " << getFields().size() << " fields";
+
+  if (!llvm::is_contained(*flips, true))
+    return emitOpError("has no flipped field; leave out 'flips'");
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ArrayOp
 //===----------------------------------------------------------------------===//
@@ -142,8 +241,35 @@ LogicalResult ValueOp::verify() {
         "must only be used as an operand of dbg.variable, dbg.struct, or "
         "dbg.array");
 
+  auto kind = getKind();
+  bool isClockOrReset = kind == ValueKind::Clock || kind == ValueKind::Reset ||
+                        kind == ValueKind::AsyncReset;
+  auto intType = dyn_cast<IntegerType>(getValue().getType());
+  if (isClockOrReset && intType && intType.getWidth() != 1)
+    return emitOpError("of kind ")
+           << stringifyValueKind(*kind) << " must be i1, got " << intType;
+
+  return verifyExt(*this, getExtAttr());
+}
+
+//===----------------------------------------------------------------------===//
+// VariableOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult VariableOp::verify() {
+  auto kind = getKind();
+  if (getDir() && kind && *kind != VariableKind::Reg)
+    return emitOpError("of kind ")
+           << stringifyVariableKind(*kind) << " cannot have a direction";
+
   return success();
 }
+
+//===----------------------------------------------------------------------===//
+// ScopeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ScopeOp::verify() { return verifyExt(*this, getExtAttr()); }
 
 //===----------------------------------------------------------------------===//
 // EnumOp
@@ -167,5 +293,6 @@ LogicalResult EnumOp::verify() {
     if (!seenValues.insert(value).second)
       return emitOpError("duplicate enum value ") << value;
   }
-  return success();
+
+  return verifyExt(*this, getExtAttr());
 }
