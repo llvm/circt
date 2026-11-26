@@ -8,7 +8,6 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
