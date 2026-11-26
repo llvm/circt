@@ -59,7 +59,7 @@ declare_mlir_python_sources(PyRTGToolSources
 ################################################################################
 
 set(LLVM_TARGET_DEFINITIONS ${CIRCT_SOURCE_DIR}/include/circt/Dialect/RTGTest/IR/RTGTest.td)
-tablegen(CIRCT rtgtest_instructions.py
+tablegen_internal(CIRCT rtgtest_instructions.py
   -gen-rtg-instruction-python-wrappers
   --return-val-func=get_virtual_reg
   --header-file=${CMAKE_CURRENT_SOURCE_DIR}/utils/rtgtest_instructions_header.py

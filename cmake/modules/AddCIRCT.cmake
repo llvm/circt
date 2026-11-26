@@ -12,7 +12,7 @@ function(circt_tablegen project ofn)
   endif()
 
   # Tablegen to the relative output file.
-  tablegen(${project} ${fixed_ofn} ${ARG_UNPARSED_ARGUMENTS})
+  tablegen_internal(${project} ${fixed_ofn} ${ARG_UNPARSED_ARGUMENTS})
 
   # If we had to use a relative output file, move it to the desired absolute
   # location.
@@ -64,7 +64,7 @@ endfunction()
 function(add_circt_doc tablegen_file output_path command)
   set(LLVM_TARGET_DEFINITIONS ${tablegen_file}.td)
   string(MAKE_C_IDENTIFIER ${output_path} output_id)
-  tablegen(MLIR ${output_id}.md ${command} ${ARGN})
+  mlir_tablegen(${output_id}.md ${command} ${ARGN})
   set(GEN_DOC_FILE ${CIRCT_BINARY_DIR}/docs/${output_path}.md)
   add_custom_command(
           OUTPUT ${GEN_DOC_FILE}

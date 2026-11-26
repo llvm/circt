@@ -18,6 +18,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
 namespace circt {
@@ -114,7 +115,9 @@ public:
   explicit operator bool() const { return bool(attr); }
   bool operator!() const { return attr == nullptr; }
 
-  void dump();
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump();
+#endif
 
 private:
   Attribute attr;
