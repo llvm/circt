@@ -445,9 +445,6 @@ Option Option::getEmpty(MlirType type) {
 Option Option::getSome(const nb::object &payload, MlirContext ctx) {
   auto value =
       pythonValueToOMEvaluatorValue(nb::cast<PythonValue>(payload), ctx);
-  if (!mlirContextEqual(ctx, omEvaluatorValueGetContext(value)))
-    throw nb::type_error(
-        "OM option payload must belong to the supplied context");
   auto type = omOptionTypeGet(omEvaluatorValueGetType(value));
   return Option(omEvaluatorOptionGet(type, value));
 }
