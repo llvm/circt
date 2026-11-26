@@ -26,10 +26,6 @@ void MooreDialect::initialize() {
   registerAttributes();
 
   // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Moore/Moore.cpp.inc"
-      >();
 }
 
 Operation *MooreDialect::materializeConstant(OpBuilder &builder,

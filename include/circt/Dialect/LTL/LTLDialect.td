@@ -12,6 +12,7 @@
 include "mlir/IR/OpBase.td"
 
 def LTLDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "ltl";
   let summary = "Linear temporal logic, sequences, and properties.";
   // See `docs/Dialect/LTL.md` for detailed dialect documentation.

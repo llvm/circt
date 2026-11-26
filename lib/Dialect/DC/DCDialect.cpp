@@ -13,12 +13,6 @@
 using namespace circt;
 using namespace dc;
 
-void DCDialect::initialize() {
-  registerTypes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/DC/DC.cpp.inc"
-      >();
-}
+void DCDialect::initialize() { registerTypes(); }
 
 #include "circt/Dialect/DC/DCDialect.cpp.inc"

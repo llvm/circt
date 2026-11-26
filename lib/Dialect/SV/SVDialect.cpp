@@ -59,12 +59,6 @@ void SVDialect::initialize() {
   registerTypes();
   registerAttributes();
 
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/SV/SV.cpp.inc"
-      >();
-
   // Register interface implementations.
   addInterfaces<SVHandleModulePortTypeInterface>();
 }

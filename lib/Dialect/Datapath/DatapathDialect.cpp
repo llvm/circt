@@ -13,11 +13,4 @@
 using namespace circt;
 using namespace datapath;
 
-void DatapathDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Datapath/Datapath.cpp.inc"
-      >();
-}
-
 #include "circt/Dialect/Datapath/DatapathDialect.cpp.inc"

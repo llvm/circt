@@ -22,6 +22,7 @@ include "mlir/Interfaces/FunctionInterfaces.td"
 include "circt/Dialect/Calyx/CalyxInterfaces.td"
 
 def CalyxDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "calyx";

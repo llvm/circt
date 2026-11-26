@@ -13,6 +13,7 @@ include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
 def DebugDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "dbg";
   let summary = "Facilities to represent debug information";
   let cppNamespace = "circt::debug";
@@ -20,7 +21,6 @@ def DebugDialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 
   let extraClassDeclaration = [{
-    void registerOps();
     void registerTypes();
   }];
 }

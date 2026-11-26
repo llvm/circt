@@ -17,6 +17,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 
 def SVDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "sv";

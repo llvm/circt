@@ -16,6 +16,7 @@
 include "mlir/IR/OpBase.td"
 
 def OMDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "om";
   let cppNamespace = "::circt::om";
 

@@ -327,12 +327,6 @@ struct CHIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
 #include "circt/Dialect/FIRRTL/CHIRRTL.cpp.inc"
 
 void CHIRRTLDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/FIRRTL/CHIRRTL.cpp.inc"
-      >();
-
   // Register types.
   registerTypes();
 

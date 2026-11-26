@@ -12,6 +12,7 @@
 include "mlir/IR/OpBase.td"
 
 def PIRDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "pir";

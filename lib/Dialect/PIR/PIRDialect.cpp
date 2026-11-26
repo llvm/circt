@@ -20,10 +20,6 @@ void PIRDialect::initialize() {
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/PIR/PIRTypes.cpp.inc"
       >();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/PIR/PIR.cpp.inc"
-      >();
 }
 
 #include "circt/Dialect/PIR/PIRDialect.cpp.inc"

@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def CIRCTStandaloneDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "circt_standalone";
   let summary = "An out-of-tree CIRCT example dialect";
   let description = [{

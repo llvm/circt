@@ -16,6 +16,7 @@
 include "mlir/IR/OpBase.td"
 
 def Handshake_Dialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "handshake";

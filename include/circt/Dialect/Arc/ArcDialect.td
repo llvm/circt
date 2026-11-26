@@ -12,6 +12,7 @@
 include "mlir/IR/DialectBase.td"
 
 def ArcDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "arc";

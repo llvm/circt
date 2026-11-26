@@ -53,11 +53,6 @@ void LLHDDialect::initialize() {
   registerTypes();
   registerAttributes();
 
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/LLHD/LLHD.cpp.inc"
-      >();
-
   addInterfaces<LLHDInlinerInterface>();
 
   mlir::DialectRegistry registry;

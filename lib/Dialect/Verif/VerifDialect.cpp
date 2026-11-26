@@ -15,13 +15,6 @@
 using namespace circt;
 using namespace verif;
 
-void VerifDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Verif/Verif.cpp.inc"
-      >();
-}
-
 Operation *VerifDialect::materializeConstant(OpBuilder &builder,
                                              Attribute value, Type type,
                                              Location loc) {

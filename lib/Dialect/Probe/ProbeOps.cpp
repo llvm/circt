@@ -11,13 +11,6 @@
 using namespace circt;
 using namespace probe;
 
-void ProbeDialect::registerOps() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Probe/Probe.cpp.inc"
-      >();
-}
-
 #define GET_OP_CLASSES
 #include "circt/Dialect/Probe/Probe.cpp.inc"
 

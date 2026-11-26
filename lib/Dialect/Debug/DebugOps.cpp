@@ -122,13 +122,6 @@ void ArrayOp::print(OpAsmPrinter &printer) {
 #define GET_OP_CLASSES
 #include "circt/Dialect/Debug/Debug.cpp.inc"
 
-void DebugDialect::registerOps() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Debug/Debug.cpp.inc"
-      >();
-}
-
 //===----------------------------------------------------------------------===//
 // ValueOp
 //===----------------------------------------------------------------------===//

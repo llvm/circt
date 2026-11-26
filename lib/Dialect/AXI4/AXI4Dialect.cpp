@@ -15,10 +15,6 @@ using namespace axi4;
 void AXI4Dialect::initialize() {
   registerAttributes();
   registerTypes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/AXI4/AXI4.cpp.inc"
-      >();
 }
 
 #include "circt/Dialect/AXI4/AXI4Dialect.cpp.inc"

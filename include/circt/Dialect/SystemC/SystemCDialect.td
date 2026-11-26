@@ -19,6 +19,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/SystemC/SystemCOpInterfaces.td"
 
 def SystemCDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "systemc";
   let cppNamespace = "::circt::systemc";
 

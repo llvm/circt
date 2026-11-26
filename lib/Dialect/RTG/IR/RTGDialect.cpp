@@ -28,11 +28,6 @@ using namespace rtg;
 void RTGDialect::initialize() {
   registerAttributes();
   registerTypes();
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/RTG/IR/RTG.cpp.inc"
-      >();
 }
 
 /// Registered hook to materialize a single constant operation from a given
