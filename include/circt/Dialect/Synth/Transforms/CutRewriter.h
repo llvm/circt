@@ -299,10 +299,61 @@ private:
   llvm::SmallVector<LogicNetworkGate> gates;
 };
 
-/// Result of matching a cut against a pattern.
+/// Describes how a matched pattern's pins bind to a cut.
 ///
-/// This structure contains the area and per-input delay information
-/// computed during pattern matching.
+/// The binding is derived from composing the cut and pattern NPN witnesses. It
+/// records the permutation and phase changes needed to implement the cut with
+/// the matched pattern.
+/// The framework composes one pair of canonical witnesses for each matched
+/// NPN class. It does not enumerate alternative bindings of symmetric
+/// functions, so the resulting permutation and phase adjustment are not
+/// necessarily optimal for area or delay.
+struct MatchBinding {
+  /// For each pattern input, the cut input that drives it.
+  SmallVector<unsigned, 6> patternInputToCutInput;
+
+  /// Bit i is set if pattern input i must observe the inverted cut input.
+  unsigned inputNegation = 0;
+
+  /// Bit i is set if pattern output i must be inverted to match the cut.
+  unsigned outputNegation = 0;
+
+  MatchBinding() = default;
+  MatchBinding(ArrayRef<unsigned> patternInputToCutInput,
+               unsigned inputNegation, unsigned outputNegation);
+
+  static MatchBinding getIdentity(unsigned numInputs);
+
+  unsigned getNumInputs() const { return patternInputToCutInput.size(); }
+  unsigned getPatternInputForCutInput(unsigned cutInputIndex) const;
+  unsigned getCutInputForPatternInput(unsigned patternInputIndex) const {
+    return patternInputToCutInput[patternInputIndex];
+  }
+
+  bool isPatternInputNegated(unsigned patternInputIndex) const {
+    return inputNegation & (1u << patternInputIndex);
+  }
+  bool isOutputNegated(unsigned outputIndex) const {
+    return outputNegation & (1u << outputIndex);
+  }
+  bool hasNegation() const { return inputNegation != 0 || outputNegation != 0; }
+};
+
+/// Optional pattern-specific implementation data selected during matching.
+/// The framework owns the binding, while patterns can retain the exact rewrite
+/// recipe whose area and delays were computed during matching.
+struct PatternImplementation {
+  virtual ~PatternImplementation() = default;
+};
+
+/// Full payload for implementing a cut with a pattern.
+///
+/// This contains the area and per-input delay information used for selection,
+/// the input/output binding used for NPN/permutation-aware timing and rewrite,
+/// and optional implementation data for patterns whose rewrite cannot be
+/// reconstructed from the cut alone.
+/// Delays are indexed by output, then pattern input pin; the binding maps cut
+/// input arrival times into this pin order.
 ///
 /// The delays can be stored in two ways:
 /// 1. As a reference to static/cached data (e.g., tech library delays)
@@ -322,7 +373,8 @@ struct MatchResult {
       : area(area), borrowedDelays(delays) {}
 
   /// Set delays by reference (zero-cost for static/cached delays).
-  /// The caller must ensure the referenced data remains valid.
+  /// The caller must ensure the referenced data remains valid through
+  /// rewriting.
   void setDelayRef(ArrayRef<DelayType> delays) { borrowedDelays = delays; }
 
   /// Set delays by transferring ownership (for dynamically computed delays).
@@ -338,6 +390,22 @@ struct MatchResult {
                                    : borrowedDelays;
   }
 
+  /// Set the binding between cut inputs and pattern pins.
+  void setBinding(MatchBinding binding) { this->binding = std::move(binding); }
+
+  /// Get the binding between cut inputs and pattern pins.
+  const MatchBinding &getBinding() const { return binding; }
+
+  /// Attach pattern-specific implementation data to this match.
+  void setImplementation(std::shared_ptr<const PatternImplementation> impl) {
+    implementation = std::move(impl);
+  }
+
+  /// Get the pattern-specific implementation data, if any.
+  const PatternImplementation *getImplementation() const {
+    return implementation.get();
+  }
+
 private:
   /// Borrowed delays (used when ownedDelays is empty).
   /// Points to external data provided via setDelayRef().
@@ -348,6 +416,12 @@ private:
   /// moving this MatchResult avoids constructing/moving the SmallVector,
   /// achieving zero-cost abstraction for the common case (borrowed delays).
   std::optional<SmallVector<DelayType, 6>> ownedDelays;
+
+  /// Binding between the matched pattern pins and cut inputs.
+  MatchBinding binding;
+
+  /// Optional implementation data for stateful/dynamic matchers.
+  std::shared_ptr<const PatternImplementation> implementation;
 };
 
 /// Represents a cut that has been successfully matched to a rewriting pattern.
@@ -359,8 +433,9 @@ class MatchedPattern {
 private:
   const CutRewritePattern *pattern = nullptr; ///< The matched library pattern
   SmallVector<DelayType, 1>
-      arrivalTimes;  ///< Arrival times of outputs from this pattern
-  double area = 0.0; ///< Area cost of this pattern
+      arrivalTimes; ///< Arrival times of outputs from this pattern
+  /// Costs, binding, and implementation selected by matching.
+  MatchResult match;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -368,8 +443,9 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes, double area)
-      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)), area(area) {}
+                 SmallVector<DelayType, 1> arrivalTimes, MatchResult match)
+      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
+        match(std::move(match)) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
@@ -380,6 +456,20 @@ public:
 
   /// Get the area cost of using this pattern.
   double getArea() const;
+
+  /// Get the per-input delays used when scoring this match.
+  ArrayRef<DelayType> getDelays() const;
+
+  /// Get the complete match payload selected for rewriting.
+  const MatchResult &getMatch() const { return match; }
+
+  /// Get the stored pattern-specific implementation data, if any.
+  const PatternImplementation *getImplementation() const {
+    return match.getImplementation();
+  }
+
+  /// Get the binding between cut inputs and pattern pins.
+  const MatchBinding &getBinding() const { return match.getBinding(); }
 };
 
 /// Represents a cut in the combinational logic network.
@@ -737,12 +827,16 @@ struct CutRewritePattern {
   ///
   /// This method is called to determine if a cut can be replaced by this
   /// pattern. If the cut matches, it should return a MatchResult containing
-  /// the area and per-input delays for this specific cut.
+  /// the area, per-input delays, and optional implementation for this cut.
   ///
-  /// If useTruthTableMatcher() returns true, this method is only
-  /// called for cuts with matching truth tables.
-  virtual std::optional<MatchResult> match(CutEnumerator &enumerator,
-                                           const Cut &cut) const = 0;
+  /// If useTruthTableMatcher() returns true, this method is only called for
+  /// cuts with matching canonical truth tables, and binding describes how the
+  /// pattern pins map to the cut. The pattern must account for any phase
+  /// changes in its implementation and costs, or reject the match.
+  /// Non-truth-table patterns receive identity bindings.
+  virtual std::optional<MatchResult>
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const = 0;
 
   /// Specify truth tables that this pattern can match.
   ///
@@ -763,9 +857,9 @@ struct CutRewritePattern {
   /// because the cut enumerator maintains references to operations throughout
   /// the circuit, making it safe to only replace the root operation of each
   /// cut while preserving all other operations unchanged.
-  virtual FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                         CutEnumerator &enumerator,
-                                         const Cut &cut) const = 0;
+  virtual FailureOr<Operation *>
+  rewrite(mlir::OpBuilder &builder, CutEnumerator &enumerator, const Cut &cut,
+          const MatchedPattern &matched) const = 0;
 
   /// Get the number of outputs this pattern produces.
   virtual unsigned getNumOutputs() const = 0;
