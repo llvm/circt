@@ -17,6 +17,10 @@
 #include "circt/Support/Naming.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/DebugLog.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
@@ -33,22 +37,43 @@ namespace comb {
 
 namespace {
 
+/// Given a MuxOp whose condition is an ICmpOp equality comparison, extracts
+/// the non-constant subject Value and the ConstantOp. Returns std::nullopt if
+/// the condition is not an ICmpOp eq with at least one hw::ConstantOp operand.
+static std::optional<std::pair<Value, hw::ConstantOp>>
+getEqSubjectAndConstant(MuxOp mux) {
+  auto icmp = mux.getCond().getDefiningOp<ICmpOp>();
+  if (!icmp || icmp.getPredicate() != ICmpPredicate::eq)
+    return std::nullopt;
+  if (auto cst = icmp.getRhs().getDefiningOp<hw::ConstantOp>())
+    return std::make_pair(icmp.getLhs(), cst);
+  if (auto cst = icmp.getLhs().getDefiningOp<hw::ConstantOp>())
+    return std::make_pair(icmp.getRhs(), cst);
+  return std::nullopt;
+}
+
 /// Mux chain with comparison folding pattern.
 class MuxChainWithComparison : public OpRewritePattern<MuxOp> {
   unsigned muxChainThreshold;
+  unsigned maxDenseIndexWidth;
 
 public:
-  // Set a higher benefit than PriorityEncoderReshape to run first.
-  MuxChainWithComparison(MLIRContext *context, unsigned muxChainThreshold)
-      : OpRewritePattern<MuxOp>(context, /*benefit=*/2),
-        muxChainThreshold(muxChainThreshold) {}
+  // Pattern benefit ordering: MuxChainWithComparison (3) >
+  // BalancedMuxTreePattern (2) > PriorityMuxReshape (1). Dense bit-extract is
+  // preferred when applicable, binary search tree handles wide/sparse cases,
+  // priority reshape is the general fallback.
+  MuxChainWithComparison(MLIRContext *context, unsigned muxChainThreshold,
+                         unsigned maxDenseIndexWidth)
+      : OpRewritePattern<MuxOp>(context, /*benefit=*/3),
+        muxChainThreshold(muxChainThreshold),
+        maxDenseIndexWidth(maxDenseIndexWidth) {}
   LogicalResult matchAndRewrite(MuxOp rootMux,
                                 PatternRewriter &rewriter) const override {
-    auto fn = [muxChainThreshold = muxChainThreshold](size_t indexWidth,
-                                                      size_t numEntries) {
+    auto fn = [this](size_t indexWidth, size_t numEntries) {
       // In this pattern, we consider it beneficial to fold mux chains
-      // with more than the threshold.
-      if (numEntries >= muxChainThreshold)
+      // with more than the threshold into a dense bit-extract tree only
+      // when indexWidth is within the max dense threshold.
+      if (numEntries >= muxChainThreshold && indexWidth <= maxDenseIndexWidth)
         return MuxChainWithComparisonFoldingStyle::BalancedMuxTree;
       return MuxChainWithComparisonFoldingStyle::None;
     };
@@ -57,6 +82,153 @@ public:
                                                     /*isFalseSide=*/true, fn) ||
                          foldMuxChainWithComparison(rewriter, rootMux,
                                                     /*isFalseSide=*/false, fn));
+  }
+};
+
+/// Represents an individual case in a linear comparison mux chain.
+struct MuxCaseEntry {
+  llvm::APInt caseConstant;
+  mlir::Value value;
+  mlir::Location loc;
+};
+
+/// Rewrites a linear chain of MuxOp with mutually exclusive ICmpOp equality
+/// comparisons into a balanced binary search tree of MuxOp with median-split
+/// range comparisons.
+class BalancedMuxTreePattern : public OpRewritePattern<MuxOp> {
+  unsigned muxChainThreshold;
+
+public:
+  BalancedMuxTreePattern(MLIRContext *context, unsigned muxChainThreshold)
+      : OpRewritePattern<MuxOp>(context, /*benefit=*/2),
+        muxChainThreshold(muxChainThreshold) {}
+
+  LogicalResult matchAndRewrite(MuxOp rootMux,
+                                PatternRewriter &rewriter) const override {
+    // Only match root muxes (not intermediate nodes in an existing chain).
+    if (isIntermediateMux(rootMux))
+      return rewriter.notifyMatchFailure(rootMux, "intermediate mux node");
+
+    Value subject = nullptr;
+    SmallVector<MuxCaseEntry, 8> cases;
+    Value defaultValue = nullptr;
+
+    if (failed(collectMuxChain(rootMux, subject, cases, defaultValue)))
+      return rewriter.notifyMatchFailure(rootMux,
+                                         "not a linear equality chain");
+
+    if (cases.size() < muxChainThreshold) {
+      return rewriter.notifyMatchFailure(rootMux,
+                                         "mux chain length below threshold");
+    }
+
+    // Sort cases by constant value to allow recursive binary partitioning.
+    llvm::sort(cases, [](const MuxCaseEntry &a, const MuxCaseEntry &b) {
+      return a.caseConstant.ult(b.caseConstant);
+    });
+
+    Value balancedResult = buildBalancedTree(rewriter, rootMux.getLoc(),
+                                             subject, cases, defaultValue);
+    if (!balancedResult)
+      return failure();
+
+    LDBG() << "Synthesized balanced binary search tree with " << cases.size()
+           << " cases\n";
+
+    replaceOpAndCopyNamehint(rewriter, rootMux, balancedResult);
+    return success();
+  }
+
+private:
+  /// Checks if this mux is the false-operand of an immediate parent mux with
+  /// a compatible equality comparison on the same subject.
+  static bool isIntermediateMux(MuxOp mux) {
+    if (!mux->hasOneUse())
+      return false;
+    auto parentMux = dyn_cast<MuxOp>(*mux->user_begin());
+    if (!parentMux)
+      return false;
+    if (parentMux.getFalseValue() != mux.getResult())
+      return false;
+
+    auto parentPair = getEqSubjectAndConstant(parentMux);
+    if (!parentPair)
+      return false;
+
+    auto thisPair = getEqSubjectAndConstant(mux);
+    if (!thisPair)
+      return false;
+
+    return parentPair->first == thisPair->first;
+  }
+
+  /// Traverses a linear chain of muxes and collects equality comparison cases.
+  static LogicalResult collectMuxChain(MuxOp rootMux, Value &commonSubject,
+                                       SmallVectorImpl<MuxCaseEntry> &cases,
+                                       Value &defaultValue) {
+    Value currentVal = rootMux.getResult();
+
+    while (auto currentMux = currentVal.getDefiningOp<MuxOp>()) {
+      auto pair = getEqSubjectAndConstant(currentMux);
+      if (!pair)
+        break;
+
+      auto [subject, constOp] = *pair;
+
+      if (!commonSubject) {
+        commonSubject = subject;
+      } else if (commonSubject != subject) {
+        break;
+      }
+
+      if (currentMux != rootMux && !currentMux->hasOneUse())
+        break;
+
+      cases.push_back(
+          {constOp.getValue(), currentMux.getTrueValue(), currentMux.getLoc()});
+      currentVal = currentMux.getFalseValue();
+    }
+
+    if (cases.empty())
+      return failure();
+
+    defaultValue = currentVal;
+    return success();
+  }
+
+  /// Recursively constructs a balanced binary tree of MuxOp.
+  static Value buildBalancedTree(PatternRewriter &rewriter, Location loc,
+                                 Value subject,
+                                 ArrayRef<MuxCaseEntry> caseSlice,
+                                 Value defaultValue) {
+    if (caseSlice.empty())
+      return defaultValue;
+
+    if (caseSlice.size() == 1) {
+      const MuxCaseEntry &entry = caseSlice.front();
+      auto caseConst =
+          hw::ConstantOp::create(rewriter, entry.loc, entry.caseConstant);
+      auto cond = ICmpOp::create(rewriter, entry.loc, ICmpPredicate::eq,
+                                 subject, caseConst);
+      return MuxOp::create(rewriter, entry.loc, cond, entry.value,
+                           defaultValue);
+    }
+
+    size_t mid = caseSlice.size() / 2;
+    ArrayRef<MuxCaseEntry> leftSlice = caseSlice.take_front(mid);
+    ArrayRef<MuxCaseEntry> rightSlice = caseSlice.drop_front(mid);
+
+    const llvm::APInt &splitConstVal = rightSlice.front().caseConstant;
+    auto splitConst = hw::ConstantOp::create(rewriter, loc, splitConstVal);
+    auto isRightCond =
+        ICmpOp::create(rewriter, loc, ICmpPredicate::uge, subject, splitConst);
+
+    Value leftTree =
+        buildBalancedTree(rewriter, loc, subject, leftSlice, defaultValue);
+    Value rightTree =
+        buildBalancedTree(rewriter, loc, subject, rightSlice, defaultValue);
+
+    return MuxOp::create(rewriter, loc, isRightCond, rightTree, leftTree);
   }
 };
 
@@ -305,8 +477,10 @@ struct BalanceMuxPass : public impl::BalanceMuxBase<BalanceMuxPass> {
     MLIRContext *context = op->getContext();
 
     RewritePatternSet patterns(context);
-    patterns.add<MuxChainWithComparison, PriorityMuxReshape>(context,
-                                                             muxChainThreshold);
+    patterns.add<MuxChainWithComparison>(context, muxChainThreshold,
+                                         maxDenseIndexWidth);
+    patterns.add<BalancedMuxTreePattern>(context, muxChainThreshold);
+    patterns.add<PriorityMuxReshape>(context, muxChainThreshold);
     patterns.add<OrOfMuxToMuxChain>(context);
 
     if (failed(applyPatternsGreedily(op, std::move(patterns))))
