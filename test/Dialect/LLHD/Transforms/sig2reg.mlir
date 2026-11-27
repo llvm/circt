@@ -160,3 +160,57 @@ hw.module @PromoteDelayedDrive(in %b : i42, out o : i42) {
   // CHECK: hw.output [[DLY]]
   hw.output %p : i42
 }
+
+// CHECK-LABEL: hw.module @PromoteNet
+hw.module @PromoteNet(in %a : i42, out o : i42) {
+  // CHECK-NOT: llhd.net
+  // CHECK-NOT: llhd.assign_net
+  %x = llhd.net wire : <i42>
+  llhd.assign_net %x, %a : i42
+  %p = llhd.prb_net %x : i42
+  // CHECK: hw.output %a
+  hw.output %p : i42
+}
+
+// CHECK-LABEL: hw.module @RemoveUnprobedNet
+hw.module @RemoveUnprobedNet(in %a : i42) {
+  // CHECK-NOT: llhd.net
+  %x = llhd.net wire : <i42>
+  llhd.assign_net %x, %a : i42
+}
+
+// CHECK-LABEL: hw.module @SkipNetMultipleDrives
+hw.module @SkipNetMultipleDrives(in %a : i42, in %b : i42, out o : i42) {
+  // CHECK: llhd.net
+  %x = llhd.net wire : <i42>
+  llhd.assign_net %x, %a : i42
+  llhd.assign_net %x, %b : i42
+  %p = llhd.prb_net %x : i42
+  hw.output %p : i42
+}
+
+// CHECK-LABEL: hw.module @SkipNetConditionalDrive
+hw.module @SkipNetConditionalDrive(in %a : i42, in %en : i1, out o : i42) {
+  // CHECK: llhd.net
+  %x = llhd.net wire : <i42>
+  llhd.assign_net %x, %a if %en : i42
+  %p = llhd.prb_net %x : i42
+  hw.output %p : i42
+}
+
+// CHECK-LABEL: hw.module @SkipNetPullKind
+hw.module @SkipNetPullKind(in %a : i42, out o : i42) {
+  // CHECK: llhd.net
+  %x = llhd.net tri0 : <i42>
+  llhd.assign_net %x, %a : i42
+  %p = llhd.prb_net %x : i42
+  hw.output %p : i42
+}
+
+// CHECK-LABEL: hw.module @SkipUndrivenNet
+hw.module @SkipUndrivenNet(out o : i42) {
+  // CHECK: llhd.net
+  %x = llhd.net wire : <i42>
+  %p = llhd.prb_net %x : i42
+  hw.output %p : i42
+}
