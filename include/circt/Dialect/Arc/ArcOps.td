@@ -1450,6 +1450,21 @@ def ArrayRefAllocOp : ArcOp<"arrayref.alloc", []> {
   let hasVerifier = 1;
 }
 
+def ArrayRefConstantOp : ArcOp<"arrayref.constant", [Pure, ConstantLike]> {
+  let summary = "constant read-only array";
+  let description = [{
+    Returns a read-only reference to a constant array initialized with `value`.
+    Elements in `value` are ordered from most significant to least significant
+    (the same as `hw.aggregate_constant`). The referenced memory is immutable;
+    writing to it is undefined behavior.
+  }];
+  let arguments = (ins ArrayAttr:$value);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = "$value attr-dict `:` type($output)";
+  let hasVerifier = 1;
+  let hasFolder = 1;
+}
+
 def ArrayRefGetOp : ArcOp<"arrayref.get", [
   MemoryEffects<[MemRead]>,
   TypesMatchWith<"array element type matches the result type", "input", "value",

@@ -69,6 +69,11 @@ Operation *ArcDialect::materializeConstant(OpBuilder &builder, Attribute value,
     if (auto attrValue = dyn_cast<IntegerAttr>(value))
       return hw::ConstantOp::create(builder, loc, type, attrValue);
 
+  // Constant ArrayRefs.
+  if (auto arrayRefType = dyn_cast<ArrayRefType>(type))
+    if (auto arrayAttr = dyn_cast<ArrayAttr>(value))
+      return ArrayRefConstantOp::create(builder, loc, arrayRefType, arrayAttr);
+
   // Parameter expressions materialize into hw.param.value.
   auto *parentOp = builder.getBlock()->getParentOp();
   auto curModule = dyn_cast<hw::HWModuleOp>(parentOp);

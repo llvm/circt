@@ -186,3 +186,46 @@ func.func @ArrayRefInitZeroArray() -> !arc.arrayref<2x!hw.array<1xi32>> {
   return %0 : !arc.arrayref<2x!hw.array<1xi32>>
 }
 
+// CHECK: llvm.mlir.global internal constant @[[G_I32:_arc_const_array]](dense<[456, 123]> : tensor<2xi32>) {addr_space = 0 : i32, alignment = 4 : i64} : !llvm.array<2 x i32>
+// CHECK-LABEL: @ArrayRefConstant
+// CHECK-NEXT: %[[A0:.*]] = llvm.mlir.addressof @[[G_I32]] : !llvm.ptr
+// CHECK-NEXT: %[[A1:.*]] = llvm.mlir.addressof @[[G_I32]] : !llvm.ptr
+// CHECK: return
+func.func @ArrayRefConstant() -> (!arc.arrayref<2xi32>, !arc.arrayref<2xi32>) {
+  %0 = arc.arrayref.constant [123 : i32, 456 : i32] : !arc.arrayref<2xi32>
+  %1 = arc.arrayref.constant [123 : i32, 456 : i32] : !arc.arrayref<2xi32>
+  return %0, %1 : !arc.arrayref<2xi32>, !arc.arrayref<2xi32>
+}
+
+// CHECK: llvm.mlir.global internal constant @[[G_ZERO:_arc_const_array_[0-9]+]](dense<0> : tensor<8xi8>) {addr_space = 0 : i32, alignment = 4 : i64} : !llvm.array<8 x i8>
+// CHECK: llvm.mlir.global internal constant @[[G_STRUCT:_arc_const_array_[0-9]+]](dense<0> : tensor<4xi8>) {addr_space = 0 : i32, alignment = 4 : i64} : !llvm.array<4 x i8>
+// CHECK-LABEL: @ArrayRefConstantZero
+// CHECK-NEXT: %[[A0:.*]] = llvm.mlir.addressof @[[G_ZERO]] : !llvm.ptr
+// CHECK-NEXT: %[[A1:.*]] = llvm.mlir.addressof @[[G_STRUCT]] : !llvm.ptr
+// CHECK: return
+func.func @ArrayRefConstantZero() -> (!arc.arrayref<2xi32>, !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>>) {
+  %0 = arc.arrayref.constant [0 : i32, 0 : i32] : !arc.arrayref<2xi32>
+  %1 = arc.arrayref.constant [[false, 0 : i8], [false, 0 : i8]] : !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>>
+  return %0, %1 : !arc.arrayref<2xi32>, !arc.arrayref<2x!hw.struct<foo: i1, bar: i8>>
+}
+
+// CHECK: llvm.mlir.global internal constant @[[G_I3:_arc_const_array_[0-9]+]](dense<[7, 1, 3, 5]> : tensor<4xi8>) {addr_space = 0 : i32, alignment = 4 : i64} : !llvm.array<4 x i8>
+// CHECK: llvm.mlir.global internal constant @[[G_I24:_arc_const_array_[0-9]+]](dense<[11259375, 1193046]> : tensor<2xi32>) {addr_space = 0 : i32, alignment = 4 : i64} : !llvm.array<2 x i32>
+// CHECK-LABEL: @ArrayRefConstantPadded
+// CHECK-NEXT: %[[A0:.*]] = llvm.mlir.addressof @[[G_I3]] : !llvm.ptr
+// CHECK-NEXT: %[[A1:.*]] = llvm.mlir.addressof @[[G_I24]] : !llvm.ptr
+// CHECK: return
+func.func @ArrayRefConstantPadded() -> (!arc.arrayref<4xi3>, !arc.arrayref<2xi24>) {
+  %0 = arc.arrayref.constant [5 : i3, 3 : i3, 1 : i3, 7 : i3] : !arc.arrayref<4xi3>
+  %1 = arc.arrayref.constant [0x123456 : i24, 0xabcdef : i24] : !arc.arrayref<2xi24>
+  return %0, %1 : !arc.arrayref<4xi3>, !arc.arrayref<2xi24>
+}
+
+// CHECK: llvm.mlir.global internal constant @[[G_I72:_arc_const_array_[0-9]+]](dense<[9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, -103, -120, 119, 102, 85, 68, 51, 34, 17, 0, 0, 0, 0, 0, 0, 0]> : tensor<32xi8>) {addr_space = 0 : i32, alignment = {{[0-9]+}} : i64} : !llvm.array<32 x i8>
+// CHECK-LABEL: @ArrayRefConstantWide
+// CHECK-NEXT: %[[ADDR:.*]] = llvm.mlir.addressof @[[G_I72]] : !llvm.ptr
+// CHECK-NEXT: return %[[ADDR]]
+func.func @ArrayRefConstantWide() -> !arc.arrayref<2xi72> {
+  %0 = arc.arrayref.constant [0x112233445566778899 : i72, 0x010203040506070809 : i72] : !arc.arrayref<2xi72>
+  return %0 : !arc.arrayref<2xi72>
+}

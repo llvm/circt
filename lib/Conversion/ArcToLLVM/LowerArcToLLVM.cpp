@@ -1455,6 +1455,41 @@ size_t computeElementByteWidth(ArrayRefType arrayRefType) {
   return llvm::divideCeil(elementBitWidth, 8);
 }
 
+// Computes the required alignment for an ArrayRef storage buffer.
+// c.f. HWToLLVM.cpp.
+static size_t
+computeArrayRefAlignment(ArrayRefType type, Operation *op,
+                         const TypeConverter &typeConverter,
+                         DenseMap<ArrayRefType, size_t> &alignmentCache) {
+  if (auto it = alignmentCache.find(type); it != alignmentCache.end())
+    return it->second;
+  auto dl = DataLayout::closest(op);
+  auto hwType =
+      hw::ArrayType::get(type.getElementType(), type.getNumElements());
+  auto llvmType = typeConverter.convertType(hwType);
+  auto alignment =
+      static_cast<unsigned>(dl.getTypePreferredAlignment(llvmType));
+  alignment = std::max(4u, alignment);
+  alignmentCache[type] = alignment;
+  return alignment;
+}
+
+static bool isZeroArrayRefAttr(Attribute rootAttr) {
+  SmallVector<Attribute> worklist{rootAttr};
+  while (!worklist.empty()) {
+    Attribute attr = worklist.pop_back_val();
+    if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+      if (!intAttr.getValue().isZero())
+        return false;
+    } else if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
+      worklist.append(arrayAttr.begin(), arrayAttr.end());
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
 struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1468,14 +1503,14 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     auto size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
                                          rewriter.getI64Type(), byteWidth);
 
-    size_t alignment = computeAllocaAlignment(arrayRefType, op);
+    size_t alignment = computeArrayRefAlignment(
+        arrayRefType, op, *getTypeConverter(), alignmentCache);
     auto alloc = LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty,
                                         size, alignment);
 
     if (op.getInitAttr()) {
       ArrayAttr initAttr = op.getInitAttr();
-      if (isZero(initAttr)) {
-        auto i8Ty = rewriter.getI8Type();
+      if (isZeroArrayRefAttr(initAttr)) {
         auto zero = LLVM::ConstantOp::create(rewriter, op.getLoc(), i8Ty, 0);
         LLVM::MemsetOp::create(rewriter, op.getLoc(), alloc, zero, size,
                                /*isVolatile=*/false);
@@ -1486,31 +1521,6 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
 
     rewriter.replaceOp(op, alloc);
     return success();
-  }
-
-  // Computes the required alignment for an AllocaOp of the given type.
-  // c.f. HWToLLVM.cpp.
-  size_t computeAllocaAlignment(ArrayRefType type, Operation *op) const {
-    if (alignmentCache.count(type)) {
-      return alignmentCache[type];
-    }
-    auto dl = DataLayout::closest(op);
-    auto hwType =
-        hw::ArrayType::get(type.getElementType(), type.getNumElements());
-    auto llvmType = getTypeConverter()->convertType(hwType);
-    auto alignment =
-        static_cast<unsigned>(dl.getTypePreferredAlignment(llvmType));
-    alignment = std::max(4u, alignment);
-    alignmentCache[type] = alignment;
-    return alignment;
-  }
-
-  static bool isZero(Attribute attr) {
-    if (auto intAttr = dyn_cast<IntegerAttr>(attr))
-      return intAttr.getValue().isZero();
-    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr))
-      return llvm::all_of(arrayAttr, [](Attribute a) { return isZero(a); });
-    return false;
   }
 
   void initializeArray(ConversionPatternRewriter &rewriter, Location loc,
@@ -1534,6 +1544,135 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
 private:
   mutable DenseMap<ArrayRefType, size_t> alignmentCache;
 };
+
+namespace {
+struct ArrayRefConstantOpLowering
+    : public OpConversionPattern<ArrayRefConstantOp> {
+  ArrayRefConstantOpLowering(
+      const TypeConverter &typeConverter, MLIRContext *context,
+      Namespace &globals,
+      DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> &constGlobalsMap)
+      : OpConversionPattern<ArrayRefConstantOp>(typeConverter, context),
+        globals(globals), constGlobalsMap(constGlobalsMap) {}
+
+  LogicalResult
+  matchAndRewrite(ArrayRefConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ArrayRefType arrayRefType = op.getType();
+    ArrayAttr valueAttr = op.getValueAttr();
+    auto hwType = hw::ArrayType::get(arrayRefType.getElementType(),
+                                     arrayRefType.getNumElements());
+    if (!computeLLVMBitWidth(arrayRefType) ||
+        !getTypeConverter()->convertType(hwType))
+      return rewriter.notifyMatchFailure(op, "unsupported element type");
+    if (!isZeroArrayRefAttr(valueAttr) &&
+        !isa<IntegerType>(arrayRefType.getElementType()))
+      return rewriter.notifyMatchFailure(
+          op, "non-zero non-integer constant arrays are not supported");
+
+    auto global =
+        getOrCreateConstantGlobal(op, arrayRefType, valueAttr, rewriter);
+    rewriter.replaceOpWithNewOp<LLVM::AddressOfOp>(op, global);
+    return success();
+  }
+
+  template <typename IntT>
+  static Attribute buildDenseIntAttr(RankedTensorType tensorTy,
+                                     ArrayAttr valueAttr) {
+    size_t numElements = valueAttr.size();
+    SmallVector<IntT> data;
+    data.reserve(numElements);
+    for (size_t elemIndex = 0; elemIndex < numElements; ++elemIndex) {
+      size_t attrIndex = numElements - elemIndex - 1;
+      APInt val = cast<IntegerAttr>(valueAttr[attrIndex]).getValue();
+      data.push_back(static_cast<IntT>(val.getZExtValue()));
+    }
+    return DenseElementsAttr::get(tensorTy, ArrayRef<IntT>(data));
+  }
+
+  LLVM::GlobalOp
+  getOrCreateConstantGlobal(ArrayRefConstantOp op, ArrayRefType arrayRefType,
+                            ArrayAttr valueAttr,
+                            ConversionPatternRewriter &rewriter) const {
+    auto key = std::make_pair(Type(arrayRefType), valueAttr);
+    if (auto it = constGlobalsMap.find(key); it != constGlobalsMap.end())
+      return it->second;
+
+    size_t numElements = arrayRefType.getNumElements();
+    size_t byteWidth = computeByteWidth(arrayRefType);
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType);
+    assert(byteWidth == numElements * elemByteWidth &&
+           "ArrayRef byte width must equal numElements * elemByteWidth");
+    size_t alignment = computeArrayRefAlignment(
+        arrayRefType, op, *getTypeConverter(), alignmentCache);
+
+    Type globalType;
+    Attribute globalInitAttr;
+    auto i8Ty = rewriter.getI8Type();
+
+    if (isZeroArrayRefAttr(valueAttr)) {
+      globalType = LLVM::LLVMArrayType::get(i8Ty, byteWidth);
+      auto tensorTy =
+          RankedTensorType::get({static_cast<int64_t>(byteWidth)}, i8Ty);
+      globalInitAttr =
+          DenseElementsAttr::get(tensorTy, static_cast<uint8_t>(0));
+    } else if (elemByteWidth == 1 || elemByteWidth == 2 || elemByteWidth == 4 ||
+               elemByteWidth == 8) {
+      Type storageIntTy = rewriter.getIntegerType(elemByteWidth * 8);
+      globalType = LLVM::LLVMArrayType::get(storageIntTy, numElements);
+      auto tensorTy = RankedTensorType::get({static_cast<int64_t>(numElements)},
+                                            storageIntTy);
+      if (elemByteWidth == 1)
+        globalInitAttr = buildDenseIntAttr<uint8_t>(tensorTy, valueAttr);
+      else if (elemByteWidth == 2)
+        globalInitAttr = buildDenseIntAttr<uint16_t>(tensorTy, valueAttr);
+      else if (elemByteWidth == 4)
+        globalInitAttr = buildDenseIntAttr<uint32_t>(tensorTy, valueAttr);
+      else
+        globalInitAttr = buildDenseIntAttr<uint64_t>(tensorTy, valueAttr);
+    } else {
+      globalType = LLVM::LLVMArrayType::get(i8Ty, byteWidth);
+      auto tensorTy =
+          RankedTensorType::get({static_cast<int64_t>(byteWidth)}, i8Ty);
+      SmallVector<uint8_t> bytes(byteWidth, 0);
+      for (size_t elemIndex = 0; elemIndex < numElements; ++elemIndex) {
+        size_t attrIndex = numElements - elemIndex - 1;
+        APInt val = cast<IntegerAttr>(valueAttr[attrIndex]).getValue();
+        unsigned bitWidth = val.getBitWidth();
+        size_t valBytes = llvm::divideCeil(bitWidth, 8);
+        size_t baseOffset = elemIndex * elemByteWidth;
+        // Pack bytes in little-endian order, matching ArrayRefCreateOpLowering.
+        for (size_t b = 0; b < valBytes; ++b) {
+          unsigned chunkBits = std::min<unsigned>(8, bitWidth - b * 8);
+          bytes[baseOffset + b] = static_cast<uint8_t>(
+              val.extractBitsAsZExtValue(chunkBits, b * 8));
+        }
+      }
+      globalInitAttr =
+          DenseElementsAttr::get(tensorTy, ArrayRef<uint8_t>(bytes));
+    }
+
+    OpBuilder::InsertionGuard guard(rewriter);
+    Operation *parent = op;
+    while (parent->getParentOp() && !isa<mlir::ModuleOp>(parent->getParentOp()))
+      parent = parent->getParentOp();
+    rewriter.setInsertionPoint(parent);
+
+    auto name = globals.newName("_arc_const_array");
+    auto global = LLVM::GlobalOp::create(
+        rewriter, op.getLoc(), globalType, /*isConstant=*/true,
+        LLVM::Linkage::Internal, name, globalInitAttr, alignment);
+    constGlobalsMap[key] = global;
+    return global;
+  }
+
+private:
+  Namespace &globals;
+  DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> &constGlobalsMap;
+  mutable DenseMap<ArrayRefType, size_t> alignmentCache;
+};
+
+} // namespace
 
 struct ArrayRefCreateOpLowering : public OpConversionPattern<ArrayRefCreateOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1939,6 +2078,8 @@ void LowerArcToLLVMPass::runOnOperation() {
   >(converter, &getContext());
   // clang-format on
   patterns.add<ExecuteOp>(convert);
+  patterns.add<ArrayRefConstantOpLowering>(converter, &getContext(), globals,
+                                           constAggregateGlobalsMap);
 
   StringCache stringCache;
   patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(

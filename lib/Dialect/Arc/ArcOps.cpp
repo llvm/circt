@@ -905,6 +905,79 @@ LogicalResult ArrayRefAllocOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// ArrayRefConstantOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayRefConstantOp::verify() {
+  ArrayAttr elements = getValue();
+  ArrayRefType arrayRefType = getType();
+  if (elements.size() != arrayRefType.getNumElements()) {
+    return emitOpError("value size does not match array size; value had size ")
+           << elements.size() << " but array has size "
+           << arrayRefType.getNumElements();
+  }
+
+  SmallVector<std::pair<Attribute, Type>> worklist;
+  worklist.reserve(elements.size());
+  for (size_t i = elements.size(); i > 0; --i)
+    worklist.emplace_back(elements[i - 1], arrayRefType.getElementType());
+
+  while (!worklist.empty()) {
+    auto [attr, type] = worklist.pop_back_val();
+    if (auto typeAlias = dyn_cast<hw::TypeAliasType>(type))
+      type = typeAlias.getCanonicalType();
+
+    if (auto intTy = dyn_cast<IntegerType>(type)) {
+      auto intAttr = dyn_cast<IntegerAttr>(attr);
+      if (!intAttr || intAttr.getType() != intTy)
+        return emitOpError("expected element to be of type ") << type;
+      continue;
+    }
+    if (auto structTy = dyn_cast<hw::StructType>(type)) {
+      auto arrayAttr = dyn_cast<ArrayAttr>(attr);
+      if (!arrayAttr)
+        return emitOpError(
+                   "expected array attribute for struct element of type ")
+               << type;
+      auto fields = structTy.getElements();
+      if (arrayAttr.size() != fields.size())
+        return emitOpError("struct attribute (")
+               << arrayAttr.size() << ") has wrong size for struct element ("
+               << fields.size() << ")";
+      for (size_t i = fields.size(); i > 0; --i)
+        worklist.emplace_back(arrayAttr[i - 1], fields[i - 1].type);
+      continue;
+    }
+    if (auto arrayTy = dyn_cast<hw::ArrayType>(type)) {
+      auto arrayAttr = dyn_cast<ArrayAttr>(attr);
+      if (!arrayAttr)
+        return emitOpError(
+                   "expected array attribute for array element of type ")
+               << type;
+      if (arrayAttr.size() != arrayTy.getNumElements())
+        return emitOpError("array attribute (")
+               << arrayAttr.size() << ") has wrong size for array element ("
+               << arrayTy.getNumElements() << ")";
+      for (size_t i = arrayAttr.size(); i > 0; --i)
+        worklist.emplace_back(arrayAttr[i - 1], arrayTy.getElementType());
+      continue;
+    }
+    if (auto typedAttr = dyn_cast<TypedAttr>(attr)) {
+      if (typedAttr.getType() != type)
+        return emitOpError("expected element to be of type ") << type;
+      continue;
+    }
+    return emitOpError("unsupported constant element attribute ")
+           << attr << " for type " << type;
+  }
+  return success();
+}
+
+OpFoldResult ArrayRefConstantOp::fold(FoldAdaptor adaptor) {
+  return getValueAttr();
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
