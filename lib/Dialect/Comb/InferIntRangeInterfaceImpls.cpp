@@ -192,13 +192,31 @@ void comb::ConcatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 
 void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                         SetIntRangeFn setResultRange) {
-  // Right-shift and truncate (trunaction implicitly handled)
-  const auto resWidth = getResult().getType().getIntOrFloatBitWidth();
-  const auto lowBit = getLowBit();
-  auto umin = argRanges[0].umin().lshr(lowBit).trunc(resWidth);
-  auto umax = argRanges[0].umax().lshr(lowBit).trunc(resWidth);
-  auto urange = ConstantIntRanges::fromUnsigned(umin, umax);
-  setResultRange(getResult(), urange);
+  const unsigned resWidth = getResult().getType().getIntOrFloatBitWidth();
+  if (resWidth == 0) {
+    setResultRange(getResult(), ConstantIntRanges::constant(APInt::getZero(0)));
+    return;
+  }
+
+  const unsigned srcWidth = getInput().getType().getIntOrFloatBitWidth();
+  const unsigned lowBit = getLowBit();
+  if (lowBit == 0 && resWidth == srcWidth) {
+    setResultRange(getResult(), argRanges[0]);
+    return;
+  }
+
+  // Shift the unsigned and signed bounds right by `lowBit`, then truncate
+  // with `truncRange` so that any rollover in the dropped high bits widens
+  // the result range instead of blindly truncating the endpoints.
+  //
+  // Simply truncating the high order bits away would be unsound.
+  auto uShifted = ConstantIntRanges::fromUnsigned(
+      argRanges[0].umin().lshr(lowBit), argRanges[0].umax().lshr(lowBit));
+  auto sShifted = ConstantIntRanges::fromSigned(
+      argRanges[0].smin().ashr(lowBit), argRanges[0].smax().ashr(lowBit));
+  setResultRange(getResult(),
+                 intrange::truncRange(uShifted, resWidth)
+                     .intersection(intrange::truncRange(sShifted, resWidth)));
 }
 
 //===----------------------------------------------------------------------===//
