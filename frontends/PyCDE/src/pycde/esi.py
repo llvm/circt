@@ -659,8 +659,11 @@ class MMIO:
     return raw_esi.MMIOServiceDeclOp(sym_name, loc=get_user_loc())
 
 
-class _HostMem(ServiceDecl):
-  """ESI standard service to request read or write access to host memory."""
+class _Memory(ServiceDecl):
+  """Base for the ESI standard memory services ('HostMem', 'Dram'). Provides the
+  shared client API: single-message and burst (list) reads and writes of a
+  byte-addressed memory, with tagged requests and responses. Not instantiated
+  directly; use one of the concrete services."""
 
   TagType = UInt(8)
 
@@ -675,13 +678,13 @@ class _HostMem(ServiceDecl):
   @staticmethod
   def read_req_burst_type(length_width: int = 64) -> StructType:
     """Burst (list) read request type: struct{address, tag, length}. 'length'
-    selects how many list items to read from the host, returned as a windowed
+    selects how many list items to read from memory, returned as a windowed
     list (used by 'read_list'; the single-message 'read' has no 'length'
     field). 'length_width' sets the bit width of the unsigned 'length' field --
     the 'read_list' service port accepts any width."""
     return StructType([
         ("address", UInt(64)),
-        ("tag", _HostMem.TagType),
+        ("tag", _Memory.TagType),
         ("length", UInt(length_width)),
     ])
 
@@ -690,7 +693,7 @@ class _HostMem(ServiceDecl):
     """Parallel window framing a list read response on the wire: a window over
     struct{tag, data: list<list_element>} carrying 'num_items' items per frame
     (plus the auto-added '<data>_size' and 'last' fields)."""
-    into = StructType([("tag", _HostMem.TagType),
+    into = StructType([("tag", _Memory.TagType),
                        ("data", EsiListType(list_element))])
     return Window("HostMemReadResp", into,
                   [Window.Frame(None, ["tag", ("data", num_items)])])
@@ -701,28 +704,28 @@ class _HostMem(ServiceDecl):
     struct{address, tag, data: list<list_element>} carrying 'num_items' items
     per frame (plus the auto-added '<data>_size' and 'last' fields). The items
     are written to sequential addresses starting at 'address'."""
-    into = StructType([("address", UInt(64)), ("tag", _HostMem.TagType),
+    into = StructType([("address", UInt(64)), ("tag", _Memory.TagType),
                        ("data", EsiListType(list_element))])
     return Window("HostMemWriteReq", into,
                   [Window.Frame(None, ["address", "tag", ("data", num_items)])])
 
+  @staticmethod
+  def _write_bundle_type(req_type: Type) -> Bundle:
+    """Build the 'write' port bundle type for the request type 'req_type'."""
+    return Bundle([
+        BundledChannel("req", ChannelDirection.FROM, req_type),
+        BundledChannel("ackTag", ChannelDirection.TO, _Memory.TagType),
+    ])
+
   def write_req_bundle_type(self, data_type: Type) -> Bundle:
     """Build a write request bundle type for the given data type."""
-    write_req_type = StructType([
-        ("address", UInt(64)),
-        ("tag", UInt(8)),
-        ("data", data_type),
-    ])
-    return Bundle([
-        BundledChannel("req", ChannelDirection.FROM, write_req_type),
-        BundledChannel("ackTag", ChannelDirection.TO, _HostMem.TagType),
-    ])
+    return self._write_bundle_type(self.write_req_channel_type(data_type))
 
   def write_req_channel_type(self, data_type: Type) -> StructType:
     """Return a write request struct type for 'data_type'."""
     return StructType([
         ("address", UInt(64)),
-        ("tag", _HostMem.TagType),
+        ("tag", _Memory.TagType),
         ("data", data_type),
     ])
 
@@ -742,7 +745,7 @@ class _HostMem(ServiceDecl):
             appid: AppID,
             req: ChannelSignal,
             options: Optional[Dict[str, object]] = None) -> ChannelSignal:
-    """Create a write request to host memory out of a request channel.
+    """Create a write request to memory out of a request channel.
 
     'req' is a struct{address, tag, data} channel for a single-message write, or
     a windowed channel (a parallel window over struct{address, tag, data: list},
@@ -750,10 +753,7 @@ class _HostMem(ServiceDecl):
     channel."""
     # Build the write bundle type directly from the request channel's type so
     # both single-message structs and windowed (list) requests are accepted.
-    write_bundle_type = Bundle([
-        BundledChannel("req", ChannelDirection.FROM, req.type.inner_type),
-        BundledChannel("ackTag", ChannelDirection.TO, _HostMem.TagType),
-    ])
+    write_bundle_type = self._write_bundle_type(req.type.inner_type)
     bundle = self.write_from_bundle(appid, write_bundle_type, options=options)
     resp = bundle.unpack(req=req)['ackTag']
     return resp
@@ -782,7 +782,7 @@ class _HostMem(ServiceDecl):
         ("data", resp_type),
     ])
     read_bundle_type = Bundle([
-        BundledChannel("req", ChannelDirection.FROM, _HostMem.ReadReqType),
+        BundledChannel("req", ChannelDirection.FROM, _Memory.ReadReqType),
         BundledChannel("resp", ChannelDirection.TO, resp_type)
     ])
     return read_bundle_type
@@ -829,7 +829,7 @@ class _HostMem(ServiceDecl):
            req: ChannelSignal,
            data_type: Type,
            options: Optional[Dict[str, object]] = None) -> ChannelSignal:
-    """Create a single-message read request to host memory out of a request
+    """Create a single-message read request to memory out of a request
     channel and return the response channel (struct{tag, data: data_type}). To
     read a list, use 'read_list'."""
 
@@ -844,7 +844,7 @@ class _HostMem(ServiceDecl):
                 element_type: Type,
                 num_items: int,
                 options: Optional[Dict[str, object]] = None) -> ChannelSignal:
-    """Create a burst (list) read of host memory. 'req' is a channel of
+    """Create a burst (list) read of memory. 'req' is a channel of
     'read_req_burst_type()' ({address, tag, length}), where the request's
     'length' is the number of list items to read starting at 'address'; the
     items are returned as a list. To receive the list, the client requests a
@@ -852,7 +852,7 @@ class _HostMem(ServiceDecl):
     list<element_type>} carrying 'num_items' items per frame (see
     'read_window'), consumed frame by frame."""
 
-    resp_type = _HostMem.read_window(element_type, num_items)
+    resp_type = _Memory.read_window(element_type, num_items)
     read_bundle_type = Bundle([
         BundledChannel("req", ChannelDirection.FROM, req.type.inner_type),
         BundledChannel("resp", ChannelDirection.TO, resp_type),
@@ -863,12 +863,111 @@ class _HostMem(ServiceDecl):
     resp = bundle_sig.unpack(req=req)['resp']
     return resp
 
+
+class _HostMem(_Memory):
+  """ESI standard service to request read or write access to host memory."""
+
   @staticmethod
   def _op(sym_name: ir.StringAttr):
     return raw_esi.HostMemServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 HostMem = _HostMem()
+
+
+class _Dram(_Memory):
+  """ESI standard service to request read or write access to one physical DRAM
+  channel. Get one with `esi.Dram[channel]` rather than constructing it
+  directly.
+
+  Each channel is a distinct `esi.service.std.dram` declaration (symbol
+  `_Dram<channel>`), and clients use a channel by requesting ports of its
+  declaration. The BSP implements each declaration separately and decides which
+  channels exist.
+
+  The client API is the same as `HostMem`'s with one addition: a single-message
+  write request may carry a `byteenable` field (one bit per byte of `data`, bit
+  0 = least significant byte) to perform a sparse, masked write. Bytes with a
+  clear enable bit are left unmodified.
+
+  Unlike `HostMem`, addresses must be aligned to the DRAM implementation's
+  memory word (its data width), and the low-order bits of an unaligned address
+  are ignored. Data is never shifted: it starts at the first byte of the
+  addressed word, so to write part of a word, supply word-positioned data and a
+  `byteenable` mask. List elements are laid out at a stride of their size
+  rounded up to a whole number of words.
+  """
+
+  def __init__(self, channel: int):
+    super().__init__()
+    self.channel = channel
+    # Name the declaration (and thus its symbol) after the channel.
+    self.name = f"_Dram{channel}"
+
+  @staticmethod
+  def byteenable_type(data_type: Type) -> Bits:
+    """The type of the optional 'byteenable' field for 'data_type'."""
+    return Bits((data_type.bitwidth + 7) // 8)
+
+  def write_req_channel_type(self,
+                             data_type: Type,
+                             byteenable: bool = False) -> StructType:
+    """Return a write request struct type for 'data_type', optionally with a
+    'byteenable' mask field."""
+    req_type = super().write_req_channel_type(data_type)
+    if not byteenable:
+      return req_type
+    return StructType(
+        list(req_type.fields) +
+        [("byteenable", _Dram.byteenable_type(data_type))])
+
+  def write_req_bundle_type(self,
+                            data_type: Type,
+                            byteenable: bool = False) -> Bundle:
+    """Build a write request bundle type for the given data type."""
+    return self._write_bundle_type(
+        self.write_req_channel_type(data_type, byteenable))
+
+  def wrap_write_req(
+      self,
+      address: UIntSignal,
+      data: Signal,
+      tag: UIntSignal,
+      valid: BitsSignal,
+      byteenable: Optional[BitsSignal] = None
+  ) -> Tuple[ChannelSignal, BitsSignal]:
+    """Create the proper channel type for a write request and use it to wrap the
+    given request arguments. Returns the Channel signal and a ready bit."""
+    inner_type = self.write_req_channel_type(data.type, byteenable is not None)
+    fields = {"address": address, "tag": tag, "data": data}
+    if byteenable is not None:
+      fields["byteenable"] = byteenable
+    return Channel(inner_type).wrap(inner_type(fields), valid)
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.DramServiceDeclOp(sym_name, loc=get_user_loc())
+
+
+class _DramChannels:
+  """The DRAM service declarations, one per physical DRAM channel.
+  `esi.Dram[channel]` returns the declaration for 'channel', always the same
+  object for a given channel, so all of a channel's clients share one
+  declaration."""
+
+  def __init__(self):
+    self._channels: Dict[int, _Dram] = {}
+
+  def __getitem__(self, channel: int) -> _Dram:
+    if not isinstance(channel, int) or isinstance(channel, bool) or channel < 0:
+      raise ValueError(
+          f"DRAM channel must be a non-negative int, got {channel!r}")
+    if channel not in self._channels:
+      self._channels[channel] = _Dram(channel)
+    return self._channels[channel]
+
+
+Dram = _DramChannels()
 
 
 class _ChannelService(ServiceDecl):
