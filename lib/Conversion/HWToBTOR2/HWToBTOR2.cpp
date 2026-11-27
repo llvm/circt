@@ -816,7 +816,8 @@ public:
   void visitComb(comb::MulOp op) { visitVariadicOp(op, "mul"); }
   void visitComb(comb::DivSOp op) { visitBinOp(op, "sdiv"); }
   void visitComb(comb::DivUOp op) { visitBinOp(op, "udiv"); }
-  void visitComb(comb::ModSOp op) { visitBinOp(op, "smod"); }
+  void visitComb(comb::ModSOp op) { visitBinOp(op, "srem"); }
+  void visitComb(comb::ModUOp op) { visitBinOp(op, "urem"); }
   void visitComb(comb::ShlOp op) { visitBinOp(op, "sll"); }
   void visitComb(comb::ShrUOp op) { visitBinOp(op, "srl"); }
   void visitComb(comb::ShrSOp op) { visitBinOp(op, "sra"); }
@@ -850,8 +851,10 @@ public:
     // predicate)
     StringRef pred = stringifyICmpPredicate(op.getPredicate());
 
-    // Check for special cases where hw doesn't align with btor syntax
-    if (pred == "ne")
+    // Check for special cases where hw doesn't align with btor syntax.
+    if (pred == "ceq" || pred == "weq")
+      pred = "eq";
+    else if (pred == "ne" || pred == "cne" || pred == "wne")
       pred = "neq";
     else if (pred == "ule")
       pred = "ulte";
@@ -1094,7 +1097,9 @@ public:
   // Compregs behave in a similar way as firregs for btor2 emission
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
-    StringRef regName = reg.getName().value();
+    // For unnamed compregs, fall back to a generic name that will be uniqued
+    // by the `SymbolNamespace`.
+    StringRef regName = reg.getName().value_or("compreg");
     auto type = reg.getType();
     if (!isa<mlir::IntegerType>(type)) {
       reg.emitError("Only integer typed seq.compregs are supported in BTOR2.");
@@ -1162,9 +1167,11 @@ public:
 
   void visit(seq::FromClockOp op) {
     for (auto *user : op->getResult(0).getUsers()) {
-      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
+      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp, verif::ClockedAssumeOp>(
+              user)) {
         op->emitError("This pass only supports seq.from_clock results being "
-                      "used by sv.always and verif.clocked_assert operations.");
+                      "used by sv.always, verif.clocked_assert and "
+                      "verif.clocked_assume operations.");
         signalPassFailure();
       }
     }

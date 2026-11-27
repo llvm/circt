@@ -51,6 +51,22 @@ module {
     // CHECK:   [[NID16:[0-9]+]] sgte [[NID3]] [[NID10]] 2
     %9 = comb.icmp bin sge %3, %a : i32
 
+    // Case and wildcard (in)equality map to regular (in)equality
+    // CHECK:   {{[0-9]+}} eq [[NID3]] [[NID10]] 2
+    %ceq = comb.icmp bin ceq %3, %a : i32
+    // CHECK:   {{[0-9]+}} neq [[NID3]] [[NID10]] 2
+    %cne = comb.icmp bin cne %3, %a : i32
+    // CHECK:   {{[0-9]+}} eq [[NID3]] [[NID10]] 2
+    %weq = comb.icmp bin weq %3, %a : i32
+    // CHECK:   {{[0-9]+}} neq [[NID3]] [[NID10]] 2
+    %wne = comb.icmp bin wne %3, %a : i32
+
+    // CHECK:   {{[0-9]+}} urem [[NID0]] [[NID10]] 2
+    %urem = comb.modu %3, %a : i32
+    // comb.mods is a signed remainder (sign follows the dividend), i.e. srem
+    // CHECK:   {{[0-9]+}} srem [[NID0]] [[NID10]] 2
+    %srem = comb.mods %3, %a : i32
+
     // CHECK:   [[NID17:[0-9]+]] and [[NID0]] 2 [[NID10]]
     // CHECK:   [[NID18:[0-9]+]] and [[NID0]] [[NID17]] [[NID10]]
     %10 = comb.and %a, %3, %3 : i32
