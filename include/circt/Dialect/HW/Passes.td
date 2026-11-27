@@ -34,6 +34,9 @@ def IMDeadCodeElim : Pass<"hw-imdce", "mlir::ModuleOp"> {
     aggressively. A value is considered as alive if it is connected to a port
     of public modules or a value with a symbol. We first populate alive values
     into a set, and then propagate the liveness by looking at their dataflow.
+    Instances of modules with side effects that are observable outside of the
+    module, such as printing a message, are kept even if their results are
+    unused.
   }];
   let statistics = [Statistic<"numErasedOps", "num-erased-ops",
                               "Number of operations erased">,
