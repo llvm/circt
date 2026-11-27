@@ -16,3 +16,14 @@ hw.module @CombLoop(in %a: i42, out z: i42) {
 hw.module.extern @myModule()
 
 hw.instance "alligator" @myModule() -> ()
+
+// -----
+
+hw.module @LocalSignalInTriggered(in %clock: i1) {
+  // expected-remark @below {{computing new phase here}}
+  hw.triggered posedge %clock {
+    %zero = hw.constant 0 : i8
+    // expected-error @below {{'llhd.sig' op must be lowered in initial phase}}
+    %signal = llhd.sig %zero : <i8>
+  }
+}
