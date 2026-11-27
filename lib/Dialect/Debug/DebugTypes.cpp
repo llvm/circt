@@ -23,6 +23,16 @@ using namespace mlir;
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Debug/DebugTypes.cpp.inc"
 
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Debug/DebugAttributes.cpp.inc"
+
+void DebugDialect::registerAttributes() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Debug/DebugAttributes.cpp.inc"
+      >();
+}
+
 void DebugDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST

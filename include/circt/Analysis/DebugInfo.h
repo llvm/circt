@@ -9,6 +9,7 @@
 #ifndef CIRCT_ANALYSIS_DEBUGINFO_H
 #define CIRCT_ANALYSIS_DEBUGINFO_H
 
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
@@ -36,6 +37,14 @@ struct DIModule {
   bool isExtern = false;
   /// If this is an inline scope created by a `dbg.scope` operation.
   bool isInline = false;
+  /// If the compiler made this module and it is not in the source.
+  bool isArtificial = false;
+  /// If a lowering pass made this module and it has no source counterpart.
+  bool isLowered = false;
+  /// The source-language class of the top module, which has no instance.
+  StringAttr typeName;
+  /// Data only the source language knows about that class, by language.
+  DictionaryAttr ext;
 };
 
 struct DIInstance {
@@ -45,6 +54,10 @@ struct DIInstance {
   StringAttr name;
   /// The instantiated module.
   DIModule *module;
+  /// The source-language class of this instance.
+  StringAttr typeName;
+  /// Data only the source language knows about that class, by language.
+  DictionaryAttr ext;
 };
 
 struct DIVariable {
@@ -54,6 +67,10 @@ struct DIVariable {
   LocationAttr loc;
   /// The SSA value representing the value of this variable.
   Value value = nullptr;
+  /// What the source declares the variable as, if not a wire.
+  std::optional<debug::VariableKind> kind;
+  /// The direction of the variable if it is a port of the module.
+  std::optional<debug::PortDirection> dir;
 };
 
 /// Debug information attached to an operation and the operations nested within.
