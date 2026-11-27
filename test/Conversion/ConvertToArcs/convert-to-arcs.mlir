@@ -347,6 +347,157 @@ hw.module @ProbeIsNonPure(in %in : i1, out out : i1) {
   hw.output %2 : i1
 }
 
+// An assignment-only cycle must be recognized without any llhd.drv. Preserve
+// the immediate assignments when committing the stable results.
+// CHECK-LABEL: hw.module @SignalFixedPoint(
+// CHECK: %[[INIT:.+]] = hw.constant 0 : i8
+// CHECK: %[[TRUE:.+]] = hw.constant true
+// CHECK: %[[A:.+]] = llhd.sig %[[INIT]] : <i8>
+// CHECK: %[[B:.+]] = llhd.sig %[[INIT]] : <i8>
+// CHECK: %[[OLD_B:.+]] = llhd.prb %[[B]] : i8
+// CHECK: %[[OLD_A:.+]] = llhd.prb %[[A]] : i8
+// CHECK: %[[RESULT:.+]]:2 = arc.fixed_point iter_args(%[[OLD_B]], %[[OLD_A]]) inputs(%[[TRUE]]) : (i8, i8, i1) -> (i8, i8) {
+// CHECK: ^bb0(%[[PREV_B:.+]]: i8, %[[PREV_A:.+]]: i8, %[[ENABLE:.+]]: i1):
+// CHECK:   %[[NEXT_B:.+]] = comb.mux %[[ENABLE]], %[[PREV_A]], %[[PREV_B]] : i8
+// CHECK:   %[[NEXT_A:.+]] = comb.mux %[[ENABLE]], %[[PREV_B]], %[[PREV_A]] : i8
+// CHECK:   arc.output %[[NEXT_B]], %[[NEXT_A]] : i8, i8
+// CHECK: }
+// CHECK: llhd.assign %[[B]], %[[RESULT]]#0 : i8
+// CHECK: llhd.assign %[[A]], %[[RESULT]]#1 : i8
+hw.module @SignalFixedPoint() {
+  %false = hw.constant 0 : i8
+  %true = hw.constant true
+  %a = llhd.sig %false : <i8>
+  %b = llhd.sig %false : <i8>
+  %read_a = llhd.prb %a : i8
+  %read_b = llhd.prb %b : i8
+  llhd.assign %b, %read_a if %true : i8
+  llhd.assign %a, %read_b if %true : i8
+}
+
+// Module inputs are block arguments without defining operations. Capture both
+// a computation input and a drive enable as invariant region arguments. Export
+// the computed drive value as an additional result for its external user.
+// CHECK-LABEL: hw.module @SignalFixedPointModuleInputs(
+// CHECK: %[[SIGNAL:.+]] = llhd.sig %{{.+}} : <i8>
+// CHECK: %[[OLD:.+]] = llhd.prb %[[SIGNAL]] : i8
+// CHECK: %[[RESULT:.+]]:2 = arc.fixed_point iter_args(%[[OLD]]) inputs(%input, %enable) : (i8, i8, i1) -> (i8, i8) {
+// CHECK-NEXT: ^bb0(%[[PREV:.+]]: i8, %[[INPUT:.+]]: i8, %[[ENABLE:.+]]: i1):
+// CHECK-NEXT:   %[[VALUE:.+]] = comb.and %[[PREV]], %[[INPUT]] : i8
+// CHECK-NEXT:   %[[NEXT:.+]] = comb.mux %[[ENABLE]], %[[VALUE]], %[[PREV]] : i8
+// CHECK-NEXT:   arc.output %[[NEXT]], %[[VALUE]] : i8, i8
+// CHECK-NEXT: }
+// CHECK: llhd.drv %[[SIGNAL]], %[[RESULT]]#0 after %{{.+}} : i8
+// CHECK: hw.output %[[RESULT]]#0, %[[RESULT]]#1 : i8, i8
+hw.module @SignalFixedPointModuleInputs(in %input: i8, in %enable: i1, out result: i8, out computed: i8) {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %signal = llhd.sig %zero : <i8>
+  %previous = llhd.prb %signal : i8
+  %next = comb.and %previous, %input : i8
+  llhd.drv %signal, %next after %delay if %enable : i8
+  hw.output %previous, %next : i8, i8
+}
+
+// A graph region permits uses before definitions. Once signal feedback becomes
+// block arguments, order both the feedback computation and its downstream
+// observer by SSA dependencies before placing them in an SSACFG region.
+// CHECK-LABEL: hw.module @SignalFixedPointReversedOrder
+// CHECK: %[[ONE:.+]] = hw.constant 1 : i8
+// CHECK: %[[RESULT:.+]] = arc.fixed_point iter_args(%{{.+}}) inputs(%[[ONE]]) : (i8, i8) -> i8 {
+// CHECK-NEXT: ^bb0(%[[PREV:.+]]: i8, %[[CAPTURE:.+]]: i8):
+// CHECK-NEXT: %[[SUM:.+]] = comb.add %[[PREV]], %[[CAPTURE]] : i8
+// CHECK-NEXT: %[[NEXT:.+]] = comb.and %[[SUM]], %[[CAPTURE]] : i8
+// CHECK-NEXT: %[[OBSERVED:.+]] = comb.xor %[[NEXT]], %[[CAPTURE]] : i8
+// CHECK-NEXT: arc.coroutine.instance @ObserveOne(%[[OBSERVED]]) sensitive [true] : (i8) -> ()
+// CHECK-NEXT: arc.output %[[NEXT]] : i8
+// CHECK-NEXT: }
+// CHECK: llhd.drv %{{.+}}, %[[RESULT]] after %{{.+}} : i8
+// CHECK: hw.output %[[RESULT]] : i8
+hw.module @SignalFixedPointReversedOrder(out result: i8) {
+  %zero = hw.constant 0 : i8
+  %one = hw.constant 1 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %signal = llhd.sig %zero : <i8>
+  %previous = llhd.prb %signal : i8
+  arc.coroutine.instance @ObserveOne(%observed) sensitive [true] : (i8) -> ()
+  %observed = comb.xor %next, %one : i8
+  %next = comb.and %sum, %one : i8
+  %sum = comb.add %previous, %one : i8
+  llhd.drv %signal, %next after %delay : i8
+  hw.output %previous : i8
+}
+
+// Two separate signal cycles share a downstream observer. Merge their
+// evaluation regions so the observer sees both feedback values on every
+// iteration and is instantiated only once. One cycle uses a zero-delay drive
+// and the other an immediate assignment.
+// CHECK-LABEL: hw.module @SharedObserver
+// CHECK-NOT: arc.coroutine.instance
+// CHECK: %[[RESULT:.+]]:2 = arc.fixed_point iter_args(%{{.+}}, %{{.+}}) : (i8, i8) -> (i8, i8) {
+// CHECK-NEXT: ^bb0(%[[A:.+]]: i8, %[[B:.+]]: i8):
+// CHECK-NEXT: arc.coroutine.instance @ObserveTwo(%[[A]], %[[B]]) sensitive [true, true] : (i8, i8) -> ()
+// CHECK-NEXT: arc.output %[[A]], %[[B]] : i8, i8
+// CHECK-NEXT: }
+// CHECK-NOT: arc.fixed_point
+// CHECK-NOT: arc.coroutine.instance
+// CHECK: hw.output %[[RESULT]]#0, %[[RESULT]]#1 : i8, i8
+hw.module @SharedObserver(out a: i8, out b: i8) {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %a = llhd.sig %zero : <i8>
+  %b = llhd.sig %zero : <i8>
+  %read_a = llhd.prb %a : i8
+  %read_b = llhd.prb %b : i8
+  arc.coroutine.instance @ObserveTwo(%read_a, %read_b) sensitive [true, true] : (i8, i8) -> ()
+  llhd.drv %a, %read_a after %delay : i8
+  llhd.assign %b, %read_b : i8
+  hw.output %read_a, %read_b : i8, i8
+}
+
+// Independent observers do not force unrelated cycles into one region.
+// CHECK-LABEL: hw.module @IndependentObservers
+// CHECK-NOT: arc.coroutine.instance
+// CHECK: arc.fixed_point iter_args(%{{.+}}) : (i8) -> i8 {
+// CHECK-NEXT: ^bb0(%[[A:.+]]: i8):
+// CHECK-NEXT: arc.coroutine.instance @ObserveOne(%[[A]]) sensitive [true] : (i8) -> ()
+// CHECK-NEXT: arc.output %[[A]] : i8
+// CHECK-NEXT: }
+// CHECK-NOT: arc.coroutine.instance
+// CHECK: arc.fixed_point iter_args(%{{.+}}) : (i8) -> i8 {
+// CHECK-NEXT: ^bb0(%[[B:.+]]: i8):
+// CHECK-NEXT: arc.coroutine.instance @ObserveOne(%[[B]]) sensitive [true] : (i8) -> ()
+// CHECK-NEXT: arc.output %[[B]] : i8
+// CHECK-NEXT: }
+// CHECK-NOT: arc.fixed_point
+// CHECK-NOT: arc.coroutine.instance
+// CHECK: hw.output
+hw.module @IndependentObservers() {
+  %zero = hw.constant 0 : i8
+  %delay = llhd.constant_time <0ns, 0d>
+  %a = llhd.sig %zero : <i8>
+  %b = llhd.sig %zero : <i8>
+  %read_a = llhd.prb %a : i8
+  %read_b = llhd.prb %b : i8
+  arc.coroutine.instance @ObserveOne(%read_a) sensitive [true] : (i8) -> ()
+  arc.coroutine.instance @ObserveOne(%read_b) sensitive [true] : (i8) -> ()
+  llhd.drv %a, %read_a after %delay : i8
+  llhd.drv %b, %read_b after %delay : i8
+  hw.output
+}
+
+arc.coroutine.define @ObserveTwo(%a: i8, %b: i8) -> (i2, i64) {
+  %mask = hw.constant 0 : i2
+  %never = hw.constant -1 : i64
+  arc.coroutine.halt %mask, %never : i2, i64
+}
+
+arc.coroutine.define @ObserveOne(%a: i8) -> (i1, i64) {
+  %mask = hw.constant false
+  %never = hw.constant -1 : i64
+  arc.coroutine.halt %mask, %never : i1, i64
+}
+
 // A register reset by another register that is converted in the same batch of
 // shuffling arcs: the reset operand must refer to the converted register's new
 // value, not to a stale/erased reference.

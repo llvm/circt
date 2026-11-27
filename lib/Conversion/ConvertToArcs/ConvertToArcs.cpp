@@ -8,16 +8,19 @@
 
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/IntEqClasses.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "convert-to-arcs"
@@ -59,9 +62,239 @@ static LogicalResult convertInitialValue(seq::CompRegOp reg,
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// The operation dependency graph used to identify computations that require
+/// fixed-point evaluation.
+class FixedPointGraph {
+public:
+  explicit FixedPointGraph(HWModuleOp module);
+  ArrayRef<Operation *> getSuccessors(const Operation *op) const;
+  ArrayRef<Operation *> getNodes() const { return nodes; }
+
+private:
+  void collectNodes(HWModuleOp module);
+  void collectEdges(HWModuleOp module);
+  void addOrdinarySSAEdges(HWModuleOp module, Operation *op);
+  void addDriveProbeEdges(Operation *op);
+  void addNode(Operation *op);
+  void addEdge(Operation *from, Operation *to);
+
+  SmallVector<Operation *> nodes;
+  DenseSet<const Operation *> nodeSet;
+  DenseMap<const Operation *, SmallVector<Operation *>> successors;
+};
+
+/// Find strongly connected components using Tarjan's algorithm.
+/// Singleton components are returned only when they have a self-edge.
+class CyclicComponentFinder {
+public:
+  SmallVector<SmallVector<Operation *>> run(const FixedPointGraph &graph);
+
+private:
+  struct Frame {
+    Operation *op;
+    ArrayRef<Operation *> remainingSuccessors;
+  };
+
+  void findComponentsFrom(Operation *root, const FixedPointGraph &graph);
+  void discoverNode(Operation *op);
+  void extractCyclicComponent(Operation *root, const FixedPointGraph &graph);
+
+  DenseMap<Operation *, size_t> indices;
+  DenseMap<Operation *, size_t> lowLinks;
+  DenseSet<Operation *> onStack;
+  SmallVector<Operation *> stack;
+  SmallVector<SmallVector<Operation *>> cyclicComponents;
+  size_t nextIndex = 0;
+};
+} // namespace
+
+FixedPointGraph::FixedPointGraph(HWModuleOp module) {
+  collectNodes(module);
+  collectEdges(module);
+}
+
+ArrayRef<Operation *>
+FixedPointGraph::getSuccessors(const Operation *op) const {
+  auto iter = successors.find(op);
+  if (iter == successors.end())
+    return {};
+  return iter->second;
+}
+
+/// Collect the operations that may participate in an instantaneous dependency
+/// cycle. State and scheduling boundaries are excluded, except for the LLHD
+/// operations needed to represent zero-delay blocking assignments.
+void FixedPointGraph::collectNodes(HWModuleOp module) {
+  for (auto &op : module.getOps()) {
+    if (isa<hw::OutputOp, FixedPointOp>(op))
+      continue;
+    if (isa<llhd::ProbeOp, llhd::DriveLikeOp, CoroutineInstanceOp>(op) ||
+        !isArcBreakingOp(&op))
+      addNode(&op);
+  }
+}
+
+void FixedPointGraph::collectEdges(HWModuleOp module) {
+  for (auto *op : nodes) {
+    addOrdinarySSAEdges(module, op);
+    addDriveProbeEdges(op);
+  }
+}
+
+void FixedPointGraph::addOrdinarySSAEdges(HWModuleOp module, Operation *op) {
+  for (auto result : op->getResults()) {
+    for (auto &use : result.getUses()) {
+      auto *user = use.getOwner();
+      while (user->getParentOp() != module)
+        user = user->getParentOp();
+      addEdge(op, user);
+    }
+  }
+}
+
+void FixedPointGraph::addDriveProbeEdges(Operation *op) {
+  auto drive = dyn_cast<llhd::DriveLikeOp>(op);
+  if (!drive)
+    return;
+  auto signal = drive.getDriven().getDefiningOp<llhd::SignalOp>();
+  if (!signal)
+    return;
+  for (auto *user : signal->getUsers())
+    if (auto probe = dyn_cast<llhd::ProbeOp>(user);
+        probe && probe.getSignal() == drive.getDriven())
+      addEdge(op, probe);
+}
+
+void FixedPointGraph::addNode(Operation *op) {
+  nodes.push_back(op);
+  nodeSet.insert(op);
+}
+
+void FixedPointGraph::addEdge(Operation *from, Operation *to) {
+  if (!from || !to || !nodeSet.contains(from) || !nodeSet.contains(to))
+    return;
+  auto &targets = successors[from];
+  if (!llvm::is_contained(targets, to))
+    targets.push_back(to);
+}
+
+SmallVector<SmallVector<Operation *>>
+CyclicComponentFinder::run(const FixedPointGraph &graph) {
+  indices.clear();
+  lowLinks.clear();
+  onStack.clear();
+  stack.clear();
+  cyclicComponents.clear();
+  nextIndex = 0;
+
+  for (auto *op : graph.getNodes())
+    if (!indices.contains(op))
+      findComponentsFrom(op, graph);
+  return std::move(cyclicComponents);
+}
+
+/// Explore nodes with an explicit DFS stack and collect completed components.
+void CyclicComponentFinder::findComponentsFrom(Operation *root,
+                                               const FixedPointGraph &graph) {
+  SmallVector<Frame> worklist;
+  discoverNode(root);
+  worklist.push_back({root, graph.getSuccessors(root)});
+
+  while (!worklist.empty()) {
+    auto &frame = worklist.back();
+    auto *op = frame.op;
+    if (!frame.remainingSuccessors.empty()) {
+      auto *successor = frame.remainingSuccessors.front();
+      frame.remainingSuccessors = frame.remainingSuccessors.drop_front();
+      auto successorIndex = indices.find(successor);
+      if (successorIndex == indices.end()) {
+        discoverNode(successor);
+        worklist.push_back({successor, graph.getSuccessors(successor)});
+      } else if (onStack.contains(successor)) {
+        lowLinks[op] = std::min(lowLinks[op], successorIndex->second);
+      }
+      continue;
+    }
+
+    if (lowLinks[op] == indices[op])
+      extractCyclicComponent(op, graph);
+    worklist.pop_back();
+    if (!worklist.empty()) {
+      auto *parent = worklist.back().op;
+      lowLinks[parent] = std::min(lowLinks[parent], lowLinks[op]);
+    }
+  }
+}
+
+/// Assign a discovery index and add the node to the component stack.
+void CyclicComponentFinder::discoverNode(Operation *op) {
+  auto index = nextIndex++;
+  indices[op] = index;
+  lowLinks[op] = index;
+  stack.push_back(op);
+  onStack.insert(op);
+}
+
+/// Pop one completed SCC and retain it only if it contains a cycle.
+void CyclicComponentFinder::extractCyclicComponent(
+    Operation *root, const FixedPointGraph &graph) {
+  SmallVector<Operation *> component;
+  Operation *member;
+  do {
+    member = stack.pop_back_val();
+    onStack.erase(member);
+    component.push_back(member);
+  } while (member != root);
+
+  bool hasSelfLoop = component.size() == 1 &&
+                     llvm::is_contained(graph.getSuccessors(component.front()),
+                                        component.front());
+  if (component.size() > 1 || hasSelfLoop)
+    cyclicComponents.push_back(std::move(component));
+}
+
+/// Include the downstream computation of each signal cycle so that sensitive
+/// coroutines observe intermediate signal changes, not just the stable results.
+/// Overlapping closures must share a region: a coroutine has one instance and
+/// cannot independently participate in two fixed-point evaluations.
+static SmallVector<DenseSet<Operation *>>
+findSignalEvaluationGroups(const FixedPointGraph &graph) {
+  auto components = CyclicComponentFinder().run(graph);
+  llvm::erase_if(components, [](const auto &component) {
+    return llvm::none_of(
+        component, [](Operation *op) { return isa<llhd::DriveLikeOp>(op); });
+  });
+
+  llvm::IntEqClasses componentClasses(components.size());
+  DenseMap<Operation *, size_t> owners;
+  for (auto [index, component] : llvm::enumerate(components)) {
+    SmallVector<Operation *> worklist(component);
+    while (!worklist.empty()) {
+      auto *op = worklist.pop_back_val();
+      auto [it, inserted] = owners.try_emplace(op, index);
+      if (!inserted) {
+        componentClasses.join(index, it->second);
+        continue;
+      }
+      llvm::append_range(worklist, graph.getSuccessors(op));
+    }
+  }
+
+  componentClasses.compress();
+  SmallVector<DenseSet<Operation *>> evaluationGroups(
+      componentClasses.getNumClasses());
+  for (auto [op, owner] : owners)
+    evaluationGroups[componentClasses[owner]].insert(op);
+  return evaluationGroups;
+}
+
+namespace {
 struct Converter {
   LogicalResult run(ModuleOp module);
   LogicalResult runOnModule(HWModuleOp module);
+  LogicalResult formFixedPoints(HWModuleOp module);
+  LogicalResult formSignalFixedPoint(HWModuleOp module,
+                                     DenseSet<Operation *> component);
   LogicalResult analyzeFanIn();
   void extractArcs(HWModuleOp module);
   LogicalResult absorbRegs(HWModuleOp module);
@@ -103,6 +336,9 @@ LogicalResult Converter::run(ModuleOp module) {
 }
 
 LogicalResult Converter::runOnModule(HWModuleOp module) {
+  if (failed(formFixedPoints(module)))
+    return failure();
+
   // Find all arc-breaking operations in this module and assign them an index.
   arcBreakers.clear();
   arcBreakerIndices.clear();
@@ -134,6 +370,301 @@ LogicalResult Converter::runOnModule(HWModuleOp module) {
     return failure();
 
   return success();
+}
+
+/// Find strongly connected components in the module operation graph. In
+/// addition to ordinary SSA dependencies, an LLHD drive produces the value
+/// observed by every probe of the driven signal. Signal cycles and their
+/// downstream observers are made explicit as arc.fixed_point regions before
+/// the ordinary arc extraction proceeds. Pure SSA cycles remain subject to
+/// the existing combinational-loop diagnostics.
+LogicalResult Converter::formFixedPoints(HWModuleOp module) {
+  if (module.getOps<llhd::DriveLikeOp>().empty())
+    return success();
+
+  FixedPointGraph graph(module);
+  auto evaluationGroups = findSignalEvaluationGroups(graph);
+  for (auto &group : evaluationGroups)
+    if (failed(formSignalFixedPoint(module, std::move(group))))
+      return failure();
+  return success();
+}
+
+namespace {
+class SignalFixedPointBuilder {
+public:
+  SignalFixedPointBuilder(HWModuleOp module, DenseSet<Operation *> component)
+      : module(module), component(std::move(component)),
+        builder(module.getBodyBlock()->getTerminator()) {}
+
+  LogicalResult run();
+
+private:
+  LogicalResult collectSignals();
+  LogicalResult checkExternalDrives();
+  void collectMovedOps();
+  void collectMovedOpCaptures();
+  void collectDriveCaptures();
+  void collectExternalResults();
+  LogicalResult createRegion();
+  LogicalResult mapSignalAccesses();
+  void moveOpsIntoRegion();
+  void createOutput();
+  void replaceExternalUses();
+  void replaceDrivesAndEraseProbes();
+  void addCaptureIfExternal(Value value);
+
+  HWModuleOp module;
+  DenseSet<Operation *> component;
+  OpBuilder builder;
+  FixedPointOp fixedPoint;
+  MapVector<llhd::SignalOp, llhd::DriveLikeOp> signalDrives;
+  SmallVector<Operation *> movedOps;
+  SmallSetVector<Value, 8> captures;
+  SmallVector<Value> externalResults;
+  SmallVector<SmallVector<OpOperand *>> externalUses;
+  SmallVector<BlockArgument> feedbackArguments;
+  DenseMap<Value, Value> captureToArgument;
+  MapVector<Value, BlockArgument> probeResultToFeedbackArgument;
+};
+} // namespace
+
+LogicalResult SignalFixedPointBuilder::run() {
+  if (failed(collectSignals()) || failed(checkExternalDrives()))
+    return failure();
+  collectMovedOps();
+  collectMovedOpCaptures();
+  collectDriveCaptures();
+  collectExternalResults();
+  if (failed(createRegion()))
+    return failure();
+  moveOpsIntoRegion();
+  createOutput();
+  // The fixed-point body requires SSA dominance.
+  // Signal feedback has now been replaced by block arguments, so
+  // the remaining computation must admit a topological ordering.
+  if (!mlir::sortTopologically(&fixedPoint.getBody().front()))
+    return fixedPoint.emitOpError(
+        "contains an SSA dependency cycle after resolving signal feedback");
+  replaceExternalUses();
+  replaceDrivesAndEraseProbes();
+  return success();
+}
+
+/// Collect the feedback signals and validate their types and drives.
+LogicalResult SignalFixedPointBuilder::collectSignals() {
+  for (auto &op : module.getOps()) {
+    if (!component.contains(&op))
+      continue;
+    auto drive = dyn_cast<llhd::DriveLikeOp>(op);
+    if (!drive)
+      continue;
+    auto signalDefOp = drive.getDriven().getDefiningOp<llhd::SignalOp>();
+    if (!signalDefOp)
+      return drive.emitOpError(
+          "fixed-point drives require a locally defined signal");
+    if (!drive.getValue().getType().isSignlessInteger())
+      return drive.emitOpError(
+          "fixed-point signal values must be signless integers");
+    if (!signalDrives.insert({signalDefOp, drive}).second)
+      return drive.emitOpError(
+          "multiple drives to one signal in a fixed-point region are not "
+          "supported");
+
+    if (auto time = drive.getTime()) {
+      auto delay = time.getDefiningOp<llhd::ConstantTimeOp>();
+      if (!delay || delay.getValue().getTime() != 0 ||
+          delay.getValue().getDelta() != 0)
+        return drive.emitOpError(
+            "fixed-point regions support only zero-time, zero-delta drives");
+    }
+  }
+
+  if (signalDrives.empty())
+    return emitError(module.getLoc(),
+                     "signal dependency cycle does not contain a drive");
+  return success();
+}
+
+/// Every feedback signal must be controlled entirely by this component.
+LogicalResult SignalFixedPointBuilder::checkExternalDrives() {
+  for (auto signal : signalDrives.keys()) {
+    for (auto *user : signal->getUsers()) {
+      auto drive = dyn_cast<llhd::DriveLikeOp>(user);
+      if (drive && drive.getDriven() == signal.getResult() &&
+          !component.contains(user))
+        return drive.emitOpError(
+            "signals in fixed-point regions cannot have external drives");
+    }
+  }
+  return success();
+}
+
+void SignalFixedPointBuilder::addCaptureIfExternal(Value value) {
+  auto *defOp = value.getDefiningOp();
+  if (defOp && component.contains(defOp))
+    return;
+  captures.insert(value);
+}
+
+void SignalFixedPointBuilder::collectMovedOpCaptures() {
+  for (auto *op : movedOps) {
+    for (auto operand : op->getOperands())
+      addCaptureIfExternal(operand);
+  }
+}
+
+void SignalFixedPointBuilder::collectDriveCaptures() {
+  for (auto drive : signalDrives.values()) {
+    addCaptureIfExternal(drive.getValue());
+    if (drive.getEnable())
+      addCaptureIfExternal(drive.getEnable());
+  }
+}
+
+void SignalFixedPointBuilder::collectMovedOps() {
+  for (auto &op : module.getOps())
+    if (component.contains(&op) && !isa<llhd::ProbeOp, llhd::DriveLikeOp>(op))
+      movedOps.push_back(&op);
+}
+
+/// Preserve results of moved operations that are used outside the component.
+void SignalFixedPointBuilder::collectExternalResults() {
+  for (auto *op : movedOps) {
+    for (auto result : op->getResults()) {
+      SmallVector<OpOperand *> uses;
+      for (auto &use : result.getUses())
+        if (!component.contains(use.getOwner()))
+          uses.push_back(&use);
+      if (uses.empty())
+        continue;
+      externalResults.push_back(result);
+      externalUses.push_back(std::move(uses));
+    }
+  }
+}
+
+/// Create the region and map captures and probes to its block arguments.
+LogicalResult SignalFixedPointBuilder::createRegion() {
+  auto loc = signalDrives.front().first.getLoc();
+  // Seed feedback with the current signal values.
+  SmallVector<Value> initials;
+  for (auto signal : signalDrives.keys())
+    initials.push_back(
+        llhd::ProbeOp::create(builder, signal.getLoc(), signal.getResult()));
+
+  SmallVector<Type> resultTypes;
+  llvm::append_range(resultTypes, ValueRange(initials).getTypes());
+  llvm::append_range(resultTypes, ValueRange(externalResults).getTypes());
+  fixedPoint = FixedPointOp::create(builder, loc, resultTypes, initials,
+                                    captures.getArrayRef());
+  auto &body = fixedPoint.getBody().emplaceBlock();
+
+  // Add feedback arguments followed by invariant capture arguments.
+  for (auto signal : signalDrives.keys())
+    feedbackArguments.push_back(
+        body.addArgument(signal.getInit().getType(), signal.getLoc()));
+
+  for (auto capture : captures)
+    captureToArgument[capture] =
+        body.addArgument(capture.getType(), capture.getLoc());
+
+  return mapSignalAccesses();
+}
+
+/// Map probes to their corresponding feedback arguments.
+LogicalResult SignalFixedPointBuilder::mapSignalAccesses() {
+  for (auto &op : module.getOps()) {
+    if (!component.contains(&op))
+      continue;
+    if (auto probe = dyn_cast<llhd::ProbeOp>(op)) {
+      auto signal = probe.getSignal().getDefiningOp<llhd::SignalOp>();
+      auto *signalIt = signalDrives.find(signal);
+      if (signalIt == signalDrives.end())
+        return probe.emitOpError(
+            "probe in fixed-point region has no corresponding drive");
+      auto index = signalIt - signalDrives.begin();
+      probeResultToFeedbackArgument[probe.getResult()] =
+          feedbackArguments[index];
+    }
+  }
+  return success();
+}
+
+/// Move the computation and reconnect its operands to the region arguments.
+void SignalFixedPointBuilder::moveOpsIntoRegion() {
+  auto &body = fixedPoint.getBody().front();
+  for (auto *op : movedOps) {
+    op->moveBefore(&body, body.end());
+    for (auto &operand : op->getOpOperands()) {
+      if (auto mapped = probeResultToFeedbackArgument.lookup(operand.get()))
+        operand.set(mapped);
+      else if (auto mapped = captureToArgument.lookup(operand.get()))
+        operand.set(mapped);
+    }
+  }
+}
+
+/// Yield the next signal values and any additional externally visible results.
+void SignalFixedPointBuilder::createOutput() {
+  auto &body = fixedPoint.getBody().front();
+  builder.setInsertionPointToEnd(&body);
+  SmallVector<Value> yieldedValues;
+  auto remapValue = [&](Value &value) {
+    if (auto mapped = probeResultToFeedbackArgument.lookup(value))
+      value = mapped;
+    else if (auto mapped = captureToArgument.lookup(value))
+      value = mapped;
+  };
+
+  for (auto [index, drive] : llvm::enumerate(signalDrives.values())) {
+    Value value = drive.getValue();
+    remapValue(value);
+
+    if (Value enable = drive.getEnable()) {
+      remapValue(enable);
+      value = comb::MuxOp::create(builder, drive.getLoc(), enable, value,
+                                  feedbackArguments[index]);
+    }
+    yieldedValues.push_back(value);
+  }
+  llvm::append_range(yieldedValues, externalResults);
+  arc::OutputOp::create(builder, fixedPoint.getLoc(), yieldedValues);
+}
+
+/// Redirect users outside the component to the stable region results.
+void SignalFixedPointBuilder::replaceExternalUses() {
+  for (auto [result, feedback] : probeResultToFeedbackArgument) {
+    auto stableResult = fixedPoint.getResult(feedback.getArgNumber());
+    for (auto &use : llvm::make_early_inc_range(result.getUses()))
+      if (!component.contains(use.getOwner()))
+        use.set(stableResult);
+  }
+  for (auto [index, uses] : llvm::enumerate(externalUses))
+    for (auto *use : uses)
+      use->set(fixedPoint.getResult(signalDrives.size() + index));
+}
+
+/// Commit the stable signal values and remove the original signal accesses.
+void SignalFixedPointBuilder::replaceDrivesAndEraseProbes() {
+  builder.setInsertionPointAfter(fixedPoint);
+  for (auto [index, oldDrive] : llvm::enumerate(signalDrives.values())) {
+    auto drive =
+        cast<llhd::DriveLikeOp>(builder.clone(*oldDrive.getOperation()));
+    drive.getValueMutable().assign(fixedPoint.getResult(index));
+    drive.getEnableMutable().clear();
+  }
+
+  for (auto drive : signalDrives.values())
+    drive.erase();
+  for (Value result : probeResultToFeedbackArgument.keys())
+    result.getDefiningOp<llhd::ProbeOp>().erase();
+}
+
+/// Replace a cycle through local LLHD signals with a fixed-point computation.
+LogicalResult Converter::formSignalFixedPoint(HWModuleOp module,
+                                              DenseSet<Operation *> component) {
+  return SignalFixedPointBuilder(module, std::move(component)).run();
 }
 
 LogicalResult Converter::analyzeFanIn() {
