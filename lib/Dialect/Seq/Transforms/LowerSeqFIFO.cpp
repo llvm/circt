@@ -79,8 +79,10 @@ public:
     Backedge rdAddrNext = bb.get(ptrType);
     Backedge wrAddrNext = bb.get(ptrType);
     Value countLag = makeReg(countNext, countType, 0, "fifo_count_lag");
+    // The memory is not reset, which keeps the reset off its write enable. The
+    // FIFO leaves reset empty, so nothing written during reset is ever read.
     seq::HLMemOp hlmem = seq::HLMemOp::create(
-        rewriter, loc, clk, rst, "fifo_mem",
+        rewriter, loc, clk, constant(i1Type, 0), "fifo_mem",
         llvm::SmallVector<int64_t>{static_cast<int64_t>(depth)}, eltType);
     Value rdAddr = makeReg(rdAddrNext, ptrType, 0, "fifo_rd_addr");
     Value wrAddr = makeReg(wrAddrNext, ptrType, 0, "fifo_wr_addr");

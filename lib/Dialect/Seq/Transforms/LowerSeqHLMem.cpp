@@ -99,20 +99,28 @@ public:
     }
 
     auto hwClk = seq::FromClockOp::create(rewriter, clk.getLoc(), clk);
-    sv::AlwaysFFOp::create(
-        rewriter, mem.getLoc(), sv::EventControl::AtPosEdge, hwClk,
-        sv::ResetType::SyncReset, sv::EventControl::AtPosEdge, rst, [&] {
-          for (auto [loc, address, data, en] : writeTuples) {
-            Value a = address, d = data; // So the lambda can capture.
-            Location l = loc;
-            // Perform write upon write enable being high.
-            sv::IfOp::create(rewriter, loc, en, [&] {
-              Value memLoc =
-                  sv::ArrayIndexInOutOp::create(rewriter, l, svMem, a);
-              sv::PAssignOp::create(rewriter, l, memLoc, d);
-            });
-          }
+    auto buildWrites = [&] {
+      for (auto [loc, address, data, en] : writeTuples) {
+        Value a = address, d = data; // So the lambda can capture.
+        Location l = loc;
+        // Perform write upon write enable being high.
+        sv::IfOp::create(rewriter, loc, en, [&] {
+          Value memLoc = sv::ArrayIndexInOutOp::create(rewriter, l, svMem, a);
+          sv::PAssignOp::create(rewriter, l, memLoc, d);
         });
+      }
+    };
+    // A memory whose reset is constant low never resets, so leave the reset out
+    // of the write block.
+    auto rstConst = rst.getDefiningOp<hw::ConstantOp>();
+    if (rstConst && rstConst.getValue().isZero())
+      sv::AlwaysFFOp::create(rewriter, mem.getLoc(),
+                             sv::EventControl::AtPosEdge, hwClk, buildWrites);
+    else
+      sv::AlwaysFFOp::create(rewriter, mem.getLoc(),
+                             sv::EventControl::AtPosEdge, hwClk,
+                             sv::ResetType::SyncReset,
+                             sv::EventControl::AtPosEdge, rst, buildWrites);
 
     // Create read ports. When latency > 1, we perform the read 1 cycle before
     // the latency deadline, and register the read output. By doing so, we avoid
