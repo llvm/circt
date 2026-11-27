@@ -208,6 +208,8 @@ void comb::ExtractOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   // Shift the unsigned and signed bounds right by `lowBit`, then truncate
   // with `truncRange` so that any rollover in the dropped high bits widens
   // the result range instead of blindly truncating the endpoints.
+  //
+  // Simply truncating the high order bits away would be unsound.
   auto uShifted = ConstantIntRanges::fromUnsigned(
       argRanges[0].umin().lshr(lowBit), argRanges[0].umax().lshr(lowBit));
   auto sShifted = ConstantIntRanges::fromSigned(

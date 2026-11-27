@@ -216,3 +216,67 @@ hw.module @extract_ranges(in %a : i8, in %b : i8, in %sel : i1) {
   %full_w = comb.extract %same_hi from 0 : (i16) -> i16
   hw.output
 }
+
+// Test interior slices where both lowBit > 0 and lowBit + resWidth < srcWidth.
+// CHECK-LABEL: @extract_middle_ranges
+hw.module @extract_middle_ranges(in %sel : i1) {
+  // CHECK-NEXT: %c4656_i16 = hw.constant 4656 : i16
+  // CHECK-NEXT: %c4703_i16 = hw.constant 4703 : i16
+  // CHECK-NEXT: %[[MID_SAME_HI:.+]] = comb.mux %sel, %c4656_i16, %c4703_i16
+  // The dropped high bits [15:8] match (0x12), so bits [7:4] of 0x1230..0x125F stay exact at [3, 5].
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_SAME_HI]] from 4 {smax = 5 : i4, smin = 3 : i4, umax = 5 : ui4, umin = 3 : ui4} : (i16) -> i4
+  // Extracting a single interior bit exercises resWidth == 1 (bit 9 of 0x1230..0x125F is always 1).
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_SAME_HI]] from 9 {smax = true, smin = true, umax = 1 : ui1, umin = 1 : ui1} : (i16) -> i1
+  // The dropped high bits [15:8] match (0x12), while bits [7:4] of 0x1260..0x129F cross the i4 sign boundary (7 -> -8).
+  // CHECK-NEXT: %c4704_i16 = hw.constant 4704 : i16
+  // CHECK-NEXT: %c4767_i16 = hw.constant 4767 : i16
+  // CHECK-NEXT: %[[MID_SIGN_CROSS:.+]] = comb.mux %sel, %c4704_i16, %c4767_i16
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_SIGN_CROSS]] from 4 {smax = 7 : i4, smin = -8 : i4, umax = 9 : ui4, umin = 6 : ui4} : (i16) -> i4
+  // The dropped bit 8 differs between 0x1230 and 0x135F, so bits [7:4] roll over and widen to the full i4 range.
+  // CHECK-NEXT: %c4959_i16 = hw.constant 4959 : i16
+  // CHECK-NEXT: %[[MID_DIFF_HI:.+]] = comb.mux %sel, %c4656_i16, %c4959_i16
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_DIFF_HI]] from 4 {smax = 7 : i4, smin = -8 : i4, umax = 15 : ui4, umin = 0 : ui4} : (i16) -> i4
+  // The signed range [-16, 15] crosses zero; shifting right by 2 yields [-4, 3], whose dropped high bits are sign-extension bits.
+  // CHECK-NEXT: %c-16_i8 = hw.constant -16 : i8
+  // CHECK-NEXT: %c15_i8 = hw.constant 15 : i8
+  // CHECK-NEXT: %[[MID_SIGNED:.+]] = comb.mux %sel, %c-16_i8, %c15_i8
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_SIGNED]] from 2 {smax = 3 : i4, smin = -4 : i4, umax = 15 : ui4, umin = 0 : ui4} : (i8) -> i4
+  // Shifting [-64, 12] right by 2 yields [-16, 3], which overflows i4 and must widen rather than truncating to [0, 3].
+  // CHECK-NEXT: %c-64_i8 = hw.constant -64 : i8
+  // CHECK-NEXT: %c12_i8 = hw.constant 12 : i8
+  // CHECK-NEXT: %[[MID_SIGNED_ROLL:.+]] = comb.mux %sel, %c-64_i8, %c12_i8
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_SIGNED_ROLL]] from 2 {smax = 7 : i4, smin = -8 : i4, umax = 15 : ui4, umin = 0 : ui4} : (i8) -> i4
+  // For the negative range [-16, -4], lshr(2) gives [60, 63] while ashr(2) gives [-4, -1]; truncating each before intersecting preserves the exact bounds.
+  // CHECK-NEXT: %c-4_i8 = hw.constant -4 : i8
+  // CHECK-NEXT: %[[MID_NEG:.+]] = comb.mux %sel, %c-16_i8, %c-4_i8
+  // CHECK-NEXT: %{{.+}} = comb.extract %[[MID_NEG]] from 2 {smax = -1 : i4, smin = -4 : i4, umax = 15 : ui4, umin = 12 : ui4} : (i8) -> i4
+  %c4656_i16 = hw.constant 4656 : i16
+  %c4703_i16 = hw.constant 4703 : i16
+  %mid_same_hi = comb.mux %sel, %c4656_i16, %c4703_i16 : i16
+  %mid_exact = comb.extract %mid_same_hi from 4 : (i16) -> i4
+  %mid_bit = comb.extract %mid_same_hi from 9 : (i16) -> i1
+
+  %c4704_i16 = hw.constant 4704 : i16
+  %c4767_i16 = hw.constant 4767 : i16
+  %mid_sign_cross = comb.mux %sel, %c4704_i16, %c4767_i16 : i16
+  %mid_sign_cross_ext = comb.extract %mid_sign_cross from 4 : (i16) -> i4
+
+  %c4959_i16 = hw.constant 4959 : i16
+  %mid_diff_hi = comb.mux %sel, %c4656_i16, %c4959_i16 : i16
+  %mid_rollover = comb.extract %mid_diff_hi from 4 : (i16) -> i4
+
+  %cm16_i8 = hw.constant -16 : i8
+  %c15_i8 = hw.constant 15 : i8
+  %mid_signed = comb.mux %sel, %cm16_i8, %c15_i8 : i8
+  %mid_signed_ext = comb.extract %mid_signed from 2 : (i8) -> i4
+
+  %cm64_i8 = hw.constant -64 : i8
+  %c12_i8 = hw.constant 12 : i8
+  %mid_signed_roll = comb.mux %sel, %cm64_i8, %c12_i8 : i8
+  %mid_signed_roll_ext = comb.extract %mid_signed_roll from 2 : (i8) -> i4
+
+  %cm4_i8 = hw.constant -4 : i8
+  %mid_neg = comb.mux %sel, %cm16_i8, %cm4_i8 : i8
+  %mid_neg_ext = comb.extract %mid_neg from 2 : (i8) -> i4
+  hw.output
+}
