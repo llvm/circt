@@ -46,7 +46,7 @@ func.func @UnrealizedConversionCast(%arg0: !moore.i8) -> !moore.i16 {
 }
 
 // CHECK-LABEL: func @Expressions
-func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1, %arg5: !moore.array<5 x i32>, %arg6: !moore.ref<i1>, %arg7: !moore.ref<!moore.array<5 x i32>>) {
+func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %arg3: !moore.i5, %arg4: !moore.i1, %arg5: !moore.array<5 x i32>, %arg6: !moore.ref<i1>, %arg7: !moore.ref<!moore.array<5 x i32>>, %arg8: !moore.net<i1>, %arg9: !moore.net<!moore.array<5 x i32>>) {
   // CHECK-NEXT: comb.concat %arg0, %arg0 : i1, i1
   // CHECK-NEXT: comb.concat %arg1, %arg1 : i1, i1
   moore.concat %arg0, %arg0 : (!moore.i1, !moore.i1) -> !moore.i2
@@ -195,6 +195,16 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: llhd.sig.array_get %arg7[[[V0]]] : <!hw.array<5xi32>>
   moore.extract_ref %arg7 from 2 : !moore.ref<!moore.array<5 x i32>> -> !moore.ref<i32>
 
+  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i0
+  // CHECK-NEXT: llhd.net.extract %arg8 from [[C0]] : <i1> -> <i1>
+  moore.extract_ref %arg8 from 0 : !moore.net<!moore.i1> -> !moore.net<!moore.i1>
+  // CHECK-NEXT: [[C2:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: llhd.net.array_slice %arg9 at [[C2]] : <!hw.array<5xi32>> -> <!hw.array<2xi32>>
+  moore.extract_ref %arg9 from 2 : !moore.net<!moore.array<5 x i32>> -> !moore.net<!moore.array<2 x i32>>
+  // CHECK-NEXT: [[C2:%.+]] = hw.constant 2 : i3
+  // CHECK-NEXT: llhd.net.array_get %arg9[[[C2]]] : <!hw.array<5xi32>>
+  moore.extract_ref %arg9 from 2 : !moore.net<!moore.array<5 x i32>> -> !moore.net<i32>
+
   // CHECK-NEXT: [[V21:%.+]] = comb.extract %c2_i32 from 6 : (i32) -> i26
   // CHECK-NEXT: [[CONST_0:%.+]] = hw.constant 0 : i26
   // CHECK-NEXT: [[V22:%.+]] = comb.icmp eq [[V21]], [[CONST_0]] : i26
@@ -245,6 +255,31 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: [[V24:%.+]] = comb.mux [[V22]], [[V23]], [[MAX]] : i3
   // CHECK-NEXT: llhd.sig.array_get %arg7[[[V24]]] : <!hw.array<5xi32>>
   moore.dyn_extract_ref %arg7 from %2 : !moore.ref<!moore.array<5 x i32>>, !moore.i32 -> !moore.ref<!moore.i32>
+
+  // CHECK-NEXT: [[HIGH_BITS:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i32
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[IN_RANGE:%.+]] = comb.icmp eq [[HIGH_BITS]], [[ZERO]] : i32
+  // CHECK-NEXT: [[LOW_BITS:%.+]] = comb.extract %c0_i32 from 0 : (i32) -> i0
+  // CHECK-NEXT: [[MAX_INDEX:%.+]] = hw.constant 0 : i0
+  // CHECK-NEXT: [[INDEX:%.+]] = comb.mux [[IN_RANGE]], [[LOW_BITS]], [[MAX_INDEX]] : i0
+  // CHECK-NEXT: llhd.net.extract %arg8 from [[INDEX]] : <i1> -> <i1>
+  moore.dyn_extract_ref %arg8 from %c0 : !moore.net<!moore.i1>, !moore.i32 -> !moore.net<!moore.i1>
+  // CHECK-NEXT: [[HIGH_BITS:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[IN_RANGE:%.+]] = comb.icmp eq [[HIGH_BITS]], [[ZERO]] : i29
+  // CHECK-NEXT: [[LOW_BITS:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX_INDEX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[INDEX:%.+]] = comb.mux [[IN_RANGE]], [[LOW_BITS]], [[MAX_INDEX]] : i3
+  // CHECK-NEXT: llhd.net.array_slice %arg9 at [[INDEX]] : <!hw.array<5xi32>> -> <!hw.array<2xi32>>
+  moore.dyn_extract_ref %arg9 from %2 : !moore.net<!moore.array<5 x i32>>, !moore.i32 -> !moore.net<!moore.array<2 x i32>>
+  // CHECK-NEXT: [[HIGH_BITS:%.+]] = comb.extract %c2_i32 from 3 : (i32) -> i29
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i29
+  // CHECK-NEXT: [[IN_RANGE:%.+]] = comb.icmp eq [[HIGH_BITS]], [[ZERO]] : i29
+  // CHECK-NEXT: [[LOW_BITS:%.+]] = comb.extract %c2_i32 from 0 : (i32) -> i3
+  // CHECK-NEXT: [[MAX_INDEX:%.+]] = hw.constant -1 : i3
+  // CHECK-NEXT: [[INDEX:%.+]] = comb.mux [[IN_RANGE]], [[LOW_BITS]], [[MAX_INDEX]] : i3
+  // CHECK-NEXT: llhd.net.array_get %arg9[[[INDEX]]] : <!hw.array<5xi32>>
+  moore.dyn_extract_ref %arg9 from %2 : !moore.net<!moore.array<5 x i32>>, !moore.i32 -> !moore.net<!moore.i32>
 
   // CHECK-NEXT: [[V26:%.+]] = hw.constant -1 : i6
   // CHECK-NEXT: comb.icmp eq %arg2, [[V26]] : i6
@@ -364,6 +399,14 @@ func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: ExtractNetArrayElement
+func.func @ExtractNetArrayElement(%j: !moore.net<array<1 x array<1 x l3>>>) -> (!moore.net<array<1 x l3>>) {
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i0
+  // CHECK: llhd.net.array_get %arg0[[[C0]]] : <!hw.array<1xarray<1xi3>>>
+  %0 = moore.extract_ref %j from 0 : net<array<1 x array<1 x l3>>> -> net<array<1 x l3>>
+  return %0 : !moore.net<array<1 x l3>>
+}
+
 // CHECK-LABEL: DynExtractArrayElement
 func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !moore.l1) -> (!moore.array<1 x l3>) {
   // CHECK: hw.array_get
@@ -378,6 +421,13 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: DynExtractNetArrayElement
+func.func @DynExtractNetArrayElement(%j: !moore.net<array<2 x array<1 x l3>>>, %idx: !moore.l1) -> (!moore.net<array<1 x l3>>) {
+  // CHECK: llhd.net.array_get %arg0[%arg1] : <!hw.array<2xarray<1xi3>>>
+  %0 = moore.dyn_extract_ref %j from %idx : net<array<2 x array<1 x l3>>>, !moore.l1 -> net<array<1 x l3>>
+  return %0 : !moore.net<array<1 x l3>>
+}
+
 // CHECK-LABEL: DynExtractRefSingleFieldStruct
 func.func @DynExtractRefSingleFieldStruct(%j: !moore.ref<struct<{p: struct<{d: l16}>}>>, %idx: !moore.l4) -> (!moore.ref<l4>) {
   // CHECK: [[P:%.+]] = llhd.sig.struct_extract %arg0["p"] : <!hw.struct<p: !hw.struct<d: i16>>>
@@ -385,6 +435,15 @@ func.func @DynExtractRefSingleFieldStruct(%j: !moore.ref<struct<{p: struct<{d: l
   // CHECK: llhd.sig.extract [[D]] from %arg1 : <i16> -> <i4>
   %0 = moore.dyn_extract_ref %j from %idx : ref<struct<{p: struct<{d: l16}>}>>, !moore.l4 -> ref<l4>
   return %0 : !moore.ref<l4>
+}
+
+// CHECK-LABEL: DynExtractNetSingleFieldStruct
+func.func @DynExtractNetSingleFieldStruct(%j: !moore.net<struct<{p: struct<{d: l16}>}>>, %idx: !moore.l4) -> (!moore.net<l4>) {
+  // CHECK: [[P:%.+]] = llhd.net.struct_extract %arg0["p"] : <!hw.struct<p: !hw.struct<d: i16>>>
+  // CHECK: [[D:%.+]] = llhd.net.struct_extract [[P]]["d"] : <!hw.struct<d: i16>>
+  // CHECK: llhd.net.extract [[D]] from %arg1 : <i16> -> <i4>
+  %0 = moore.dyn_extract_ref %j from %idx : net<struct<{p: struct<{d: l16}>}>>, !moore.l4 -> net<l4>
+  return %0 : !moore.net<l4>
 }
 
 // CHECK-LABEL: func @AdvancedConversion
@@ -700,13 +759,16 @@ moore.module @QueueHierRef() {
 }
 
 // CHECK-LABEL: hw.module @Struct
-moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
+moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, in %arg2 : !moore.net<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
   %0 = moore.struct_extract %arg0, "exp_bits" : !moore.struct<{exp_bits: i32, man_bits: i32}> -> i32
 
   // CHECK: llhd.sig.struct_extract %arg1["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
   %ref = moore.struct_extract_ref %arg1, "exp_bits" : ref<!moore.struct<{exp_bits: i32, man_bits: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
+
+  // CHECK: llhd.net.struct_extract %arg2["exp_bits"] : <!hw.struct<exp_bits: i32, man_bits: i32>>
+  %net = moore.struct_extract_ref %arg2, "exp_bits" : net<!moore.struct<{exp_bits: i32, man_bits: i32}>> -> net<i32>
 
   // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig [[INIT]] : <!hw.struct<exp_bits: i32, man_bits: i32>>
@@ -724,13 +786,16 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
 }
 
 // CHECK-LABEL: hw.module @Union
-moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}>, in %arg1 : !moore.ref<union<{x: i32, y: i32}>>, out o : !moore.i32, out p : !moore.union<{x: i32, y: i32}>) {
+moore.module @Union(in %a : !moore.i32, in %arg0 : !moore.union<{x: i32, y: i32}>, in %arg1 : !moore.ref<union<{x: i32, y: i32}>>, in %arg2 : !moore.net<union<{x: i32, y: i32}>>, out o : !moore.i32, out p : !moore.union<{x: i32, y: i32}>) {
   // CHECK: hw.union_extract %arg0["x"] : !hw.union<x: i32, y: i32>
   %0 = moore.union_extract %arg0, "x" : !moore.union<{x: i32, y: i32}> -> !moore.i32
 
   // CHECK: llhd.sig.struct_extract %arg1["x"] : <!hw.union<x: i32, y: i32>>
   %ref = moore.union_extract_ref %arg1, "x" : ref<union<{x: i32, y: i32}>> -> ref<i32>
   moore.assign %ref, %0 : ref<i32>
+
+  // CHECK: llhd.net.struct_extract %arg2["x"] : <!hw.union<x: i32, y: i32>>
+  %net = moore.union_extract_ref %arg2, "x" : net<union<{x: i32, y: i32}>> -> net<i32>
 
   // CHECK: hw.union_create "x", %a : !hw.union<x: i32, y: i32>
   %1 = moore.union_create %a {fieldName = "x"} : !moore.i32 -> union<{x: i32, y: i32}>

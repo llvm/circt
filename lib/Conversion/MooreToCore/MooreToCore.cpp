@@ -1549,11 +1549,9 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    auto inputRefType = dyn_cast<llhd::RefType>(adaptor.getInput().getType());
-    if (!inputRefType)
-      return op.emitOpError(
-          "extracts from a net which is not currently supported");
-    auto inputType = inputRefType.getNestedType();
+    bool isNet = isa<llhd::NetType>(adaptor.getInput().getType());
+    auto inputType =
+        cast<llhd::WrapperType>(adaptor.getInput().getType()).getNestedType();
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
@@ -1564,8 +1562,12 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
           rewriter, op.getLoc(),
           rewriter.getIntegerType(llvm::Log2_64_Ceil(width)),
           adaptor.getLowBit());
-      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
-          op, resultType, adaptor.getInput(), lowBit);
+      if (isNet)
+        rewriter.replaceOpWithNewOp<llhd::NetExtractOp>(
+            op, resultType, adaptor.getInput(), lowBit);
+      else
+        rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
+            op, resultType, adaptor.getInput(), lowBit);
       return success();
     }
 
@@ -1578,14 +1580,22 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
       // If the result type is not the same as the array's element type, then
       // it has to be a slice.
       if (arrType.getElementType() !=
-          cast<llhd::RefType>(resultType).getNestedType()) {
-        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
-            op, resultType, adaptor.getInput(), lowBit);
+          cast<llhd::WrapperType>(resultType).getNestedType()) {
+        if (isNet)
+          rewriter.replaceOpWithNewOp<llhd::NetArraySliceOp>(
+              op, resultType, adaptor.getInput(), lowBit);
+        else
+          rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
+              op, resultType, adaptor.getInput(), lowBit);
         return success();
       }
 
-      rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
-                                                       lowBit);
+      if (isNet)
+        rewriter.replaceOpWithNewOp<llhd::NetArrayGetOp>(op, adaptor.getInput(),
+                                                         lowBit);
+      else
+        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
+                                                         lowBit);
       return success();
     }
 
@@ -1641,11 +1651,9 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // TODO: properly handle out-of-bounds accesses
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    auto inputRefType = dyn_cast<llhd::RefType>(adaptor.getInput().getType());
-    if (!inputRefType)
-      return op.emitOpError(
-          "extracts from a net which is not currently supported");
-    auto inputType = inputRefType.getNestedType();
+    bool isNet = isa<llhd::NetType>(adaptor.getInput().getType());
+    auto inputType =
+        cast<llhd::WrapperType>(adaptor.getInput().getType()).getNestedType();
     Value input = adaptor.getInput();
     if (isa<hw::StructType>(inputType)) {
       SmallVector<StringAttr> path;
@@ -1661,9 +1669,14 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
       if (!isa<IntegerType>(leafType))
         return rewriter.notifyMatchFailure(
             op, "dynamic extract from struct with non-integer field");
-      for (StringAttr name : path)
-        input = llhd::SigStructExtractOp::create(rewriter, op.getLoc(), input,
-                                                 name);
+      for (StringAttr name : path) {
+        if (isNet)
+          input = llhd::NetStructExtractOp::create(rewriter, op.getLoc(), input,
+                                                   name);
+        else
+          input = llhd::SigStructExtractOp::create(rewriter, op.getLoc(), input,
+                                                   name);
+      }
       inputType = leafType;
     }
 
@@ -1675,8 +1688,12 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
       Value amount =
           adjustIntegerWidth(rewriter, adaptor.getLowBit(),
                              llvm::Log2_64_Ceil(width), op->getLoc());
-      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(op, resultType, input,
-                                                      amount);
+      if (isNet)
+        rewriter.replaceOpWithNewOp<llhd::NetExtractOp>(op, resultType, input,
+                                                        amount);
+      else
+        rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(op, resultType, input,
+                                                        amount);
       return success();
     }
 
@@ -1685,15 +1702,24 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
           rewriter, adaptor.getLowBit(),
           llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
 
-      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+      auto resultNestedType =
+          cast<llhd::WrapperType>(resultType).getNestedType();
       bool isSingleElementExtract =
           arrType.getElementType() == resultNestedType;
 
-      if (isSingleElementExtract)
-        rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, input, idx);
-      else
-        rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(op, resultType,
-                                                           input, idx);
+      if (isSingleElementExtract) {
+        if (isNet)
+          rewriter.replaceOpWithNewOp<llhd::NetArrayGetOp>(op, input, idx);
+        else
+          rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, input, idx);
+      } else {
+        if (isNet)
+          rewriter.replaceOpWithNewOp<llhd::NetArraySliceOp>(op, resultType,
+                                                             input, idx);
+        else
+          rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(op, resultType,
+                                                             input, idx);
+      }
 
       return success();
     }
@@ -1747,11 +1773,12 @@ struct StructExtractRefOpConversion
   LogicalResult
   matchAndRewrite(StructExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!isa<llhd::RefType>(adaptor.getInput().getType()))
-      return op.emitOpError(
-          "extracts from a net which is not currently supported");
-    rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
-        op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    if (isa<llhd::NetType>(adaptor.getInput().getType()))
+      rewriter.replaceOpWithNewOp<llhd::NetStructExtractOp>(
+          op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    else
+      rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
+          op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();
   }
 };
@@ -1788,11 +1815,12 @@ struct UnionExtractRefOpConversion
   LogicalResult
   matchAndRewrite(UnionExtractRefOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (!isa<llhd::RefType>(adaptor.getInput().getType()))
-      return op.emitOpError(
-          "extracts from a net which is not currently supported");
-    rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
-        op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    if (isa<llhd::NetType>(adaptor.getInput().getType()))
+      rewriter.replaceOpWithNewOp<llhd::NetStructExtractOp>(
+          op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    else
+      rewriter.replaceOpWithNewOp<llhd::SigStructExtractOp>(
+          op, adaptor.getInput(), adaptor.getFieldNameAttr());
     return success();
   }
 };
