@@ -12,10 +12,7 @@
 using namespace circt;
 using namespace debug;
 
-void DebugDialect::initialize() {
-  registerOps();
-  registerTypes();
-}
+void DebugDialect::initialize() { registerTypes(); }
 
 // Dialect implementation generated from `DebugDialect.td`
 #include "circt/Dialect/Debug/DebugDialect.cpp.inc"

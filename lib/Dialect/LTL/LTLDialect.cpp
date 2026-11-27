@@ -22,10 +22,6 @@ void LTLDialect::initialize() {
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/LTL/LTLTypes.cpp.inc"
       >();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/LTL/LTL.cpp.inc"
-      >();
 }
 
 Operation *LTLDialect::materializeConstant(OpBuilder &builder, Attribute value,

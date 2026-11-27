@@ -18,10 +18,4 @@ void FSMDialect::initialize() {
 #define GET_TYPEDEF_LIST
 #include "circt/Dialect/FSM/FSMTypes.cpp.inc"
       >();
-
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/FSM/FSM.cpp.inc"
-      >();
 }

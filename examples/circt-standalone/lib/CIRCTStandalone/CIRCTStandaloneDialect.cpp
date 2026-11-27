@@ -13,10 +13,3 @@ using namespace circt;
 using namespace circt::standalone;
 
 #include "CIRCTStandalone/CIRCTStandaloneOpsDialect.cpp.inc"
-
-void CIRCTStandaloneDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "CIRCTStandalone/CIRCTStandaloneOps.cpp.inc"
-      >();
-}

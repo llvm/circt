@@ -33,10 +33,6 @@ using namespace circt::esi;
 void ESIDialect::initialize() {
   registerAttributes();
   registerTypes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/ESI/ESI.cpp.inc"
-      >();
 }
 
 Operation *ESIDialect::materializeConstant(OpBuilder &builder, Attribute value,

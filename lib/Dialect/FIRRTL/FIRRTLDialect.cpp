@@ -33,12 +33,6 @@ void FIRRTLDialect::initialize() {
   registerTypes();
   registerAttributes();
 
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/FIRRTL/FIRRTL.cpp.inc"
-      >();
-
   addInterface<FIRRTLIntrinsicLoweringDialectInterface>();
 }
 

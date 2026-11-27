@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def Pipeline_Dialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "pipeline";
   let cppNamespace = "::circt::pipeline";
   let dependentDialects = [

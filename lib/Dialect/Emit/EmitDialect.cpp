@@ -23,11 +23,4 @@ using namespace emit;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void EmitDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Emit/Emit.cpp.inc"
-      >();
-}
-
 #include "circt/Dialect/Emit/EmitDialect.cpp.inc"

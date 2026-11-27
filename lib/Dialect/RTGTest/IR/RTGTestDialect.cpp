@@ -29,11 +29,6 @@ using namespace rtgtest;
 void RTGTestDialect::initialize() {
   registerTypes();
   registerAttributes();
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/RTGTest/IR/RTGTest.cpp.inc"
-      >();
 }
 
 /// Registered hook to materialize a single constant operation from a given

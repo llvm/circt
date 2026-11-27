@@ -46,11 +46,6 @@ struct ArcInlinerInterface : public mlir::DialectInlinerInterface {
 void ArcDialect::initialize() {
   registerTypes();
   registerAttributes();
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Arc/Arc.cpp.inc"
-      >();
-
   // Register interface implementations.
   addInterfaces<ArcInlinerInterface>();
 }

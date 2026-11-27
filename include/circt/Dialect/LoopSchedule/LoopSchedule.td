@@ -13,6 +13,8 @@ include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
 def LoopSchedule_Dialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "loopschedule";
   let cppNamespace = "::circt::loopschedule";
   let summary = "Representation of scheduled loops";

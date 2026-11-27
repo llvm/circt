@@ -22,6 +22,8 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 //===----------------------------------------------------------------------===//
 
 def InteropDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "interop";
 
   let summary = "Provides interoperability between backends and tools";

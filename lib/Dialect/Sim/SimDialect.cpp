@@ -25,14 +25,7 @@ using namespace sim;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void SimDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Sim/Sim.cpp.inc"
-      >();
-
-  registerTypes();
-}
+void SimDialect::initialize() { registerTypes(); }
 
 #include "circt/Dialect/Sim/SimDialect.cpp.inc"
 

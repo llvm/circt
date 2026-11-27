@@ -12,6 +12,7 @@
 include "mlir/IR/OpBase.td"
 
 def DCDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "dc";
   let summary = "Dynamic Control";
   let description = [{

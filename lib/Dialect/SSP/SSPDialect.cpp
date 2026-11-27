@@ -16,12 +16,6 @@
 using namespace circt;
 using namespace circt::ssp;
 
-void SSPDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/SSP/SSP.cpp.inc"
-      >();
-  registerAttributes();
-}
+void SSPDialect::initialize() { registerAttributes(); }
 
 #include "circt/Dialect/SSP/SSPDialect.cpp.inc"

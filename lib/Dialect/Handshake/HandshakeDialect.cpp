@@ -27,11 +27,6 @@ using namespace circt::handshake;
 //===----------------------------------------------------------------------===//
 
 void HandshakeDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Handshake/Handshake.cpp.inc"
-      >();
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "circt/Dialect/Handshake/HandshakeAttributes.cpp.inc"

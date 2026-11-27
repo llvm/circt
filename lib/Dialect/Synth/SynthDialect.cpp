@@ -21,11 +21,6 @@ void SynthDialect::initialize() {
 #define GET_ATTRDEF_LIST
 #include "circt/Dialect/Synth/SynthAttributes.cpp.inc"
       >();
-
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Synth/Synth.cpp.inc"
-      >();
 }
 
 Operation *SynthDialect::materializeConstant(OpBuilder &builder,

@@ -38,12 +38,6 @@ struct CalyxOpAsmDialectInterface : public OpAsmDialectInterface {
 } // end anonymous namespace
 
 void CalyxDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Calyx/Calyx.cpp.inc"
-      >();
-
   // Register interface implementations.
   addInterfaces<CalyxOpAsmDialectInterface>();
 }

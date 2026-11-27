@@ -38,12 +38,6 @@ struct HWArithInlinerInterface : public mlir::DialectInlinerInterface {
 //===----------------------------------------------------------------------===//
 
 void HWArithDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/HWArith/HWArith.cpp.inc"
-      >();
-
   // Register interface implementations
   addInterfaces<HWArithInlinerInterface>();
 }

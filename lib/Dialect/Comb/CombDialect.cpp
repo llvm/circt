@@ -24,14 +24,6 @@ using namespace comb;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void CombDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Comb/Comb.cpp.inc"
-      >();
-}
-
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This implementation
 /// delegates to the HW dialect's materializeConstant function. See the

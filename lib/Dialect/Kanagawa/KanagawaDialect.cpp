@@ -20,12 +20,6 @@ using namespace kanagawa;
 void KanagawaDialect::initialize() {
   registerTypes();
   registerAttributes();
-
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Kanagawa/Kanagawa.cpp.inc"
-      >();
 }
 
 void KanagawaDialect::registerAttributes() {

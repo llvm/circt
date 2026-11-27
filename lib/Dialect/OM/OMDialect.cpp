@@ -18,11 +18,6 @@
 #include "circt/Dialect/OM/OMDialect.cpp.inc"
 
 void circt::om::OMDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/OM/OM.cpp.inc"
-      >();
-
   registerTypes();
   registerAttributes();
 }

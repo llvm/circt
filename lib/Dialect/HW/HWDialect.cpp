@@ -100,12 +100,6 @@ void HWDialect::initialize() {
   registerTypes();
   registerAttributes();
 
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/HW/HW.cpp.inc"
-      >();
-
   // Register interface implementations.
   addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface,
                 HWProbeTypeDialectInterface>();

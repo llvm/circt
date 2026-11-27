@@ -17,6 +17,7 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
 def MSFTDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   // TODO: Migrate custom assembly formats to prop-dict.
   let useStrictPropertiesInAssemblyFormat = 0;
   let name = "msft";

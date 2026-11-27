@@ -1143,10 +1143,3 @@ LogicalResult LatencyReturnOp::verify() {
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
-
-void PipelineDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Pipeline/Pipeline.cpp.inc"
-      >();
-}

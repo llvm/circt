@@ -16,6 +16,8 @@
 include "mlir/IR/OpBase.td"
 
 def DatapathDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "datapath";
 
   let summary = "Datapath Optimization";

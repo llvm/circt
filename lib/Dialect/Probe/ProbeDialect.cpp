@@ -31,7 +31,6 @@ struct ProbeHWModulePortTypeInterface : public hw::HWModulePortTypeInterface {
 } // namespace
 
 void ProbeDialect::initialize() {
-  registerOps();
   registerTypes();
   addInterfaces<ProbeHWModulePortTypeInterface>();
 }

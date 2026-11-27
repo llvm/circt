@@ -12,6 +12,8 @@
 include "mlir/IR/OpBase.td"
 
 def CombDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
+  let hasInitializer = 0;
   let name = "comb";
   let summary = "Types and operations for comb dialect";
   let description = [{

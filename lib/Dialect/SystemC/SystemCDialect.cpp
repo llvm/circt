@@ -24,12 +24,6 @@ void SystemCDialect::initialize() {
   registerAttributes();
   // Register types.
   registerTypes();
-
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/SystemC/SystemC.cpp.inc"
-      >();
 }
 
 #include "circt/Dialect/SystemC/SystemCDialect.cpp.inc"

@@ -12,6 +12,7 @@
 include "mlir/IR/DialectBase.td"
 
 def ProbeDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "probe";
   let summary = "SSA-based hardware probe handles";
   let cppNamespace = "circt::probe";
@@ -19,7 +20,6 @@ def ProbeDialect : Dialect {
   let useDefaultTypePrinterParser = 1;
 
   let extraClassDeclaration = [{
-    void registerOps();
     void registerTypes();
   }];
 }

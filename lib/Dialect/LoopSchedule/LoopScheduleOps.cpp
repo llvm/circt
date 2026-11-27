@@ -319,11 +319,4 @@ LogicalResult LoopScheduleTerminatorOp::verify() {
 #define GET_OP_CLASSES
 #include "circt/Dialect/LoopSchedule/LoopSchedule.cpp.inc"
 
-void LoopScheduleDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/LoopSchedule/LoopSchedule.cpp.inc"
-      >();
-}
-
 #include "circt/Dialect/LoopSchedule/LoopScheduleDialect.cpp.inc"

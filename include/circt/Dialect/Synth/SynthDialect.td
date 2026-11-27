@@ -16,6 +16,7 @@
 include "mlir/IR/DialectBase.td"
 
 def Synth_Dialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "synth";
   let cppNamespace = "::circt::synth";
   let summary = "Synthesis dialect for logic synthesis operations";

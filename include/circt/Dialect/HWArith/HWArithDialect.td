@@ -17,6 +17,7 @@ include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
 def HWArithDialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "hwarith";
   let cppNamespace = "::circt::hwarith";
   let summary = "Types and operations for the HWArith dialect";

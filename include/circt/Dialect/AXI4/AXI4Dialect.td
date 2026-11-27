@@ -16,6 +16,7 @@
 include "mlir/IR/OpBase.td"
 
 def AXI4Dialect : Dialect {
+  let useDefaultOperationRegistration = 1;
   let name = "axi4";
 
   let summary = "Types and operations for the AXI4 dialect";

@@ -19,12 +19,4 @@ using namespace circt::interop;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void InteropDialect::initialize() {
-  // Register operations.
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Interop/Interop.cpp.inc"
-      >();
-}
-
 #include "circt/Dialect/Interop/InteropDialect.cpp.inc"
