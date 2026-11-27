@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --arc-lower-clocks-to-funcs --verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s --arc-extract-initial-and-final-functions --verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL: func.func @Trivial_initial(%arg0: !arc.storage) {
 // CHECK-NEXT:    [[TMP:%.+]] = hw.constant 9002
@@ -19,7 +19,7 @@
 // CHECK-SAME:  {
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
 // CHECK-NEXT:    [[TMP:%.+]] = hw.constant 9001
-// CHECK-NEXT:    call @DummyB([[TMP]]) {a}
+// CHECK:         call @DummyB([[TMP]]) {a}
 // CHECK-NEXT:  }
 
 arc.model @Trivial io !hw.modty<> {
@@ -38,3 +38,23 @@ arc.model @Trivial io !hw.modty<> {
 
 func.func private @DummyA() -> i42
 func.func private @DummyB(i42) -> ()
+
+// Pure operations are cloned along with their operands; other values must be
+// model arguments.
+// CHECK-LABEL: func.func @PureChain_initial(%arg0: !arc.storage) {
+// CHECK-NEXT:    [[A:%.+]] = hw.constant 1
+// CHECK-NEXT:    [[B:%.+]] = comb.add [[A]], [[A]]
+// CHECK-NEXT:    [[C:%.+]] = arc.as_context %arg0 : !arc.storage
+// CHECK-NEXT:    arc.terminate [[C]], true
+// CHECK-NEXT:    call @DummyB([[B]])
+// CHECK-NEXT:    return
+arc.model @PureChain io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  %0 = hw.constant 1 : i42
+  %1 = comb.add %0, %0 : i42
+  arc.initial {
+    %ctx = arc.as_context %arg0 : !arc.storage
+    arc.terminate %ctx, true
+    func.call @DummyB(%1) : (i42) -> ()
+  }
+}
