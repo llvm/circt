@@ -432,7 +432,7 @@ def OutputOp : LLHDOp<"output", [
   }];
 }
 
-def DelayOp : LLHDOp<"delay", [Pure, SameOperandsAndResultType]> {
+def DelayOp : LLHDOp<"delay", [Pure, AllTypesMatch<["input", "result"]>]> {
   let summary = "specifies value propagation delay";
   let description = [{
     This operation propagates all value changes of the input to the output after
@@ -442,7 +442,7 @@ def DelayOp : LLHDOp<"delay", [Pure, SameOperandsAndResultType]> {
     store.
   }];
 
-  let arguments = (ins HWNonInOutType:$input, LLHDTimeAttr:$delay);
+  let arguments = (ins HWNonInOutType:$input, LLHDTimeType:$delay);
   let results = (outs HWNonInOutType:$result);
 
   let assemblyFormat = "$input `by` $delay attr-dict `:` type($result)";
