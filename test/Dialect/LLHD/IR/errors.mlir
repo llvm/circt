@@ -150,3 +150,24 @@ func.func @funcCallingCoroutine() {
   func.call @someCoroutine() : () -> ()
   return
 }
+
+// -----
+
+hw.module @illegal_net_result_array_too_big(in %net : !llhd.net<!hw.array<3xi32>>, in %ind : i2) {
+  // expected-error @+1 {{width of result type has to be smaller than or equal to the input type}}
+  %0 = llhd.net.array_slice %net at %ind : <!hw.array<3xi32>> -> <!hw.array<4xi32>>
+}
+
+// -----
+
+hw.module @illegal_net_to_int_to_wide(in %n : !llhd.net<i32>, in %ind : i5) {
+  // expected-error @+1 {{width of result type has to be smaller than or equal to the input type}}
+  %0 = llhd.net.extract %n from %ind : <i32> -> <i64>
+}
+
+// -----
+
+hw.module @net_extract_element_invalid_field(in %tup : !llhd.net<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
+  // expected-error @+1 {{invalid field name specified}}
+  %0 = llhd.net.struct_extract %tup["foobar"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
+}

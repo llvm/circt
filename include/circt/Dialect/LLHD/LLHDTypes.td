@@ -74,6 +74,15 @@ class RefTypeOf<Type type> : ConfinedType<RefType,
   Type nestedType = type;
 }
 
+/// A net type with a specific nested type.
+class NetTypeOf<Type type> : ConfinedType<NetType,
+  [SubstLeaves<"$_self", "cast<llhd::NetType>($_self).getNestedType()",
+               type.predicate>],
+  "net of " # type.summary, "llhd::NetType"
+> {
+  Type nestedType = type;
+}
+
 class TypeMatchesRefNestedType<string type, string refType> : TypesMatchWith<
   type # " type must match " # refType # " ref element type",
   type, refType, "RefType::get($_self)"
