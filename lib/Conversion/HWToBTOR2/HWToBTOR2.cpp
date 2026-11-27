@@ -450,40 +450,55 @@ private:
   // Generate a btor2 assertion given an assertion operation
   // Note that a predicate inversion must have already been generated at this
   // point
-  void genBad(Operation *assertop) {
+  void genBad(Operation *assertop, std::optional<StringRef> label = {}) {
     // Start by finding the expression lid
     size_t assertLID = getOpLID(assertop);
-    genBad(assertLID);
+    genBad(assertLID, label);
   }
 
   // Generate a btor2 assertion given an assertion operation's LID
   // Note that a predicate inversion must have already been generated at this
   // point
-  void genBad(size_t assertLID) {
+  void genBad(size_t assertLID, std::optional<StringRef> label = {}) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << " "
        << "bad"
-       << " " << assertLID << "\n";
+       << " " << assertLID;
+    genSymbol(label);
+    os << "\n";
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
-  void genConstraint(Value expr) {
+  void genConstraint(Value expr, std::optional<StringRef> label = {}) {
     // Start by finding the expression lid
     size_t exprLID = getOpLID(expr);
 
-    genConstraint(exprLID);
+    genConstraint(exprLID, label);
   }
 
   // Generate a btor2 constraint given an expression from an assumption
   // operation
-  void genConstraint(size_t exprLID) {
+  void genConstraint(size_t exprLID, std::optional<StringRef> label = {}) {
     // Build and return the btor2 string
     // Also update the lid as this instruction is not associated to an mlir op
     os << lid++ << " "
        << "constraint"
-       << " " << exprLID << "\n";
+       << " " << exprLID;
+    genSymbol(label);
+    os << "\n";
+  }
+
+  // Append the label of an assertion/assumption as the trailing btor2 symbol
+  // of a bad/constraint line, so that properties can be identified in the
+  // output. Btor2 symbols cannot contain whitespace, so it is replaced by '_'.
+  void genSymbol(std::optional<StringRef> label) {
+    if (!label || label->empty())
+      return;
+    os << " ";
+    for (char c : *label)
+      os << (llvm::isSpace(c) ? '_' : c);
   }
 
   // Generate an ite instruction (if then else) given a predicate, two values
@@ -926,13 +941,13 @@ public:
     }
 
     // Generate the bad btor2 instruction
-    genBad(op);
+    genBad(op, op.getLabel());
   }
   // Assumptions are converted to a btor2 constraint instruction
   void visitSV(sv::AssumeOp op) {
     // Extract the expression that we want our constraint to be about
     Value expr = op.getExpression();
-    genConstraint(expr);
+    genConstraint(expr, op.getLabel());
   }
 
   // Our only concern with an AlwaysOp is that it follows clocking constraints
@@ -998,7 +1013,7 @@ public:
     }
 
     // Generate the bad btor2 instruction
-    genBad(assertLID);
+    genBad(assertLID, op.getLabel());
   }
 
   template <typename Op>
@@ -1016,8 +1031,8 @@ public:
       assumeLID = genImplies(op, en, prop);
     }
 
-    // Generate the bad btor2 instruction
-    genConstraint(assumeLID);
+    // Generate the btor2 constraint instruction
+    genConstraint(assumeLID, op.getLabel());
   }
 
   // Folds the enable signal into the property and converts the result into a
