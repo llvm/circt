@@ -323,6 +323,43 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %syncreadmem_singleport_readwritePortA_readData_rw_wmask_y, %readwritePortA_isWrite_2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  // A constant mask on one write port must not unmask a memory whose other
+  // write port has a per-lane mask.
+  // CHECK-LABEL: firrtl.module @MixedMasks
+  firrtl.module @MixedMasks(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, in %lanes: !firrtl.uint<2>) {
+    %mem_w0, %mem_w1 = firrtl.mem Undefined {depth = 2 : i64, name = "mem", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    // CHECK:      %mem_w0, %mem_w1 = firrtl.mem
+    // CHECK-SAME:   mask: uint<2>>, !firrtl.bundle<{{.*}}mask: uint<2>>
+    %0 = firrtl.subfield %mem_w0[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+    firrtl.matchingconnect %0, %c3_ui2 : !firrtl.uint<2>
+    %1 = firrtl.subfield %mem_w1[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    firrtl.matchingconnect %1, %lanes : !firrtl.uint<2>
+  }
+
+  // A uniform mask that is not all ones carries over to the one bit mask.
+  // CHECK-LABEL: firrtl.module @UniformMasks
+  firrtl.module @UniformMasks(in %clock: !firrtl.clock, in %sel: !firrtl.uint<1>) {
+    %mem_w0, %mem_w1 = firrtl.mem Undefined {depth = 2 : i64, name = "mem", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    // CHECK:      %mem_w0, %mem_w1 = firrtl.mem
+    // CHECK-SAME:   mask: uint<1>>, !firrtl.bundle<{{.*}}mask: uint<1>>
+    // CHECK:      %[[MASK0:.+]] = firrtl.subfield %mem_w0[mask]
+    // CHECK:      %[[ZERO:.+]] = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %[[MASK0]], %[[ZERO]]
+    // CHECK:      %[[MASK1:.+]] = firrtl.subfield %mem_w1[mask]
+    %0 = firrtl.subfield %mem_w0[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    firrtl.matchingconnect %0, %c0_ui2 : !firrtl.uint<2>
+    %1 = firrtl.subfield %mem_w1[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<2>, mask: uint<2>>
+    %s = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %s, %sel : !firrtl.uint<1>
+    // CHECK:      %[[SELS:.+]] = firrtl.cat %s, %s
+    // CHECK-NEXT: %[[BIT0:.+]] = firrtl.bits %[[SELS]] 0 to 0
+    // CHECK-NEXT: firrtl.matchingconnect %[[MASK1]], %[[BIT0]]
+    %2 = firrtl.cat %s, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    firrtl.matchingconnect %1, %2 : !firrtl.uint<2>
+  }
+
   // Test that this pass walks into layers.
   // CHECK-LABEL: firrtl.module @Layers
   firrtl.layer @A bind {}
