@@ -1,58 +1,147 @@
-// This is such a large lowering that it doesn't really make that much sense to
-// inspect the test output. So this is mostly here for detecting regressions.
-// Canonicalize used to remove some of the constants introduced by the lowering.
-// RUN: circt-opt --lower-seq-fifo --canonicalize %s | FileCheck %s --implicit-check-not=seq.fifo
+// RUN: circt-opt --lower-seq-fifo --cse %s | FileCheck %s --implicit-check-not=seq.fifo
 
+// Every status output is a register, stepped from compares of the count against
+// constants, and the enables only select between values computed from
+// registers. Reading while empty and writing while full are protocol
+// violations: they are not guarded against, but asserted on outside of reset.
 
-// CHECK:  hw.module @fifo1(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : i32, in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : i32) {
-// CHECK:    %fifo_count = seq.compreg sym @fifo_count %{{.+}}, %clk reset %rst, %c0_i2 : i2  
-// CHECK:    %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <3xi32>
-// CHECK:    %fifo_rd_addr = seq.compreg sym @fifo_rd_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
-// CHECK:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
-// CHECK:    %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 0 : i64} : !seq.hlmem<3xi32>
-// CHECK:    seq.write %fifo_mem[%fifo_wr_addr] %in wren %wrEn {latency = 1 : i64} : !seq.hlmem<3xi32>
-//           All of the comb logic which would be here is pretty much impossible
-//           to verify visually. As a rule, if it's difficult to verify
-//           visually, that's a candidate for a new op: #8002. Since I haven't
-//           verified it visually, I'm not including it here. There are
-//           integration tests for it.
-// CHECK:    verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO empty when read enabled" : i1
-// CHECK:    verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO full when write enabled" : i1
-// CHECK:    hw.output %fifo_mem_rdata : i32
+// A depth which is not a power of two: the pointers wrap on a compare of the
+// current pointer.
+// CHECK-LABEL: hw.module @fifo1(
+// CHECK:         %fifo_count = seq.compreg sym @fifo_count [[COUNT_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
+// CHECK-NEXT:    %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <3xi32>
+// CHECK-NEXT:    %fifo_rd_addr = seq.compreg sym @fifo_rd_addr [[RD_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
+// CHECK-NEXT:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr [[WR_NEXT:%.+]], %clk reset %rst, %c0_i2 : i2
+// CHECK-NEXT:    %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 0 : i64} : !seq.hlmem<3xi32>
+// CHECK-NEXT:    seq.write %fifo_mem[%fifo_wr_addr] %in wren %wrEn {latency = 1 : i64} : !seq.hlmem<3xi32>
+// CHECK:         [[NOT_RD:%.+]] = comb.xor %rdEn, %true
+// CHECK-NEXT:    [[UP:%.+]] = comb.and %wrEn, [[NOT_RD]]
+// CHECK-NEXT:    [[NOT_WR:%.+]] = comb.xor %wrEn, %true
+// CHECK-NEXT:    [[DOWN:%.+]] = comb.and %rdEn, [[NOT_WR]]
+// CHECK:         [[INC:%.+]] = comb.add %fifo_count, %c1_i2
+// CHECK-NEXT:    [[DEC:%.+]] = comb.sub %fifo_count, %c1_i2
+// CHECK-NEXT:    [[COUNT_DOWN:%.+]] = comb.mux [[DOWN]], [[DEC]], %fifo_count
+// CHECK-NEXT:    [[COUNT_NEXT]] = comb.mux [[UP]], [[INC]], [[COUNT_DOWN]] {sv.namehint = "fifo_count_next"}
+// CHECK-NEXT:    %fifo_full = seq.compreg sym @fifo_full [[FULL_NEXT:%.+]], %clk reset %rst, %false : i1
+// CHECK:         [[AT_DEPTH_M1:%.+]] = comb.icmp eq %fifo_count, %c-2_i2
+// CHECK-NEXT:    [[FULL_DOWN:%.+]] = comb.mux [[DOWN]], %false, %fifo_full
+// CHECK-NEXT:    [[FULL_NEXT]] = comb.mux [[UP]], [[AT_DEPTH_M1]], [[FULL_DOWN]]
+// CHECK-NEXT:    %fifo_empty = seq.compreg sym @fifo_empty [[EMPTY_NEXT:%.+]], %clk reset %rst, %true : i1
+// CHECK-NEXT:    [[AT_1:%.+]] = comb.icmp eq %fifo_count, %c1_i2
+// CHECK-NEXT:    [[EMPTY_DOWN:%.+]] = comb.mux [[DOWN]], [[AT_1]], %fifo_empty
+// CHECK-NEXT:    [[EMPTY_NEXT]] = comb.mux [[UP]], %false, [[EMPTY_DOWN]]
+// CHECK-NEXT:    [[WR_INC:%.+]] = comb.add %fifo_wr_addr, %c1_i2
+// CHECK-NEXT:    [[WR_WRAP:%.+]] = comb.icmp eq %fifo_wr_addr, %c-2_i2
+// CHECK-NEXT:    [[WR_STEP:%.+]] = comb.mux [[WR_WRAP]], %c0_i2, [[WR_INC]]
+// CHECK-NEXT:    [[WR_NEXT]] = comb.mux %wrEn, [[WR_STEP]], %fifo_wr_addr {sv.namehint = "fifo_wr_addr_next"}
+// CHECK-NEXT:    [[RD_INC:%.+]] = comb.add %fifo_rd_addr, %c1_i2
+// CHECK-NEXT:    [[RD_WRAP:%.+]] = comb.icmp eq %fifo_rd_addr, %c-2_i2
+// CHECK-NEXT:    [[RD_STEP:%.+]] = comb.mux [[RD_WRAP]], %c0_i2, [[RD_INC]]
+// CHECK-NEXT:    [[RD_NEXT]] = comb.mux %rdEn, [[RD_STEP]], %fifo_rd_addr {sv.namehint = "fifo_rd_addr_next"}
+// CHECK-NEXT:    [[CLK:%.+]] = seq.from_clock %clk
+// CHECK-NEXT:    [[NOT_RST:%.+]] = comb.xor %rst, %true
+// CHECK-NEXT:    [[RD_EMPTY:%.+]] = comb.and %rdEn, %fifo_empty
+// CHECK-NEXT:    [[RD_OK:%.+]] = comb.xor [[RD_EMPTY]], %true
+// CHECK-NEXT:    verif.clocked_assert [[RD_OK]] if [[NOT_RST]], posedge [[CLK]] label "FIFO empty when read enabled" : i1
+// CHECK-NEXT:    [[WR_FULL:%.+]] = comb.and %wrEn, %fifo_full
+// CHECK-NEXT:    [[WR_OK:%.+]] = comb.xor [[WR_FULL]], %true
+// CHECK-NEXT:    verif.clocked_assert [[WR_OK]] if [[NOT_RST]], posedge [[CLK]] label "FIFO full when write enabled" : i1
+// CHECK-NEXT:    hw.output %fifo_mem_rdata : i32
 hw.module @fifo1(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out : i32) {
   %out, %full, %empty = seq.fifo depth 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
   hw.output %out : i32
 }
 
-
-// CHECK:   hw.module @fifo2(in %[[CLOCK:.*]] : !seq.clock, in %[[VAL_1:.*]] : i1, in %[[VAL_2:.*]] : [[TY:.+]], in %[[VAL_3:.*]] : i1, in %[[VAL_4:.*]] : i1, out out : [[TY]], out empty : i1, out full : i1, out almost_empty : i1, out almost_full : i1) {
-// CHECK:     %fifo_count = seq.compreg sym @fifo_count %{{.+}}, %clk reset %rst, %c0_i3 : i3  
-// CHECK:     %fifo_mem = seq.hlmem @fifo_mem %clk, %rst : <4x!hw.array<2xi32>>
-// CHECK:     %fifo_rd_addr = seq.compreg sym @fifo_rd_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
-// CHECK:     %fifo_wr_addr = seq.compreg sym @fifo_wr_addr %{{.+}}, %clk reset %rst, %c0_i2 : i2  
-// CHECK:     %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 1 : i64} : !seq.hlmem<4x!hw.array<2xi32>>
-// CHECK:     seq.write %fifo_mem[%fifo_wr_addr] %in wren %wrEn {latency = 1 : i64} : !seq.hlmem<4x!hw.array<2xi32>>
-//            See comment above.
-// CHECK:     verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO empty when read enabled" : i1
-// CHECK:     verif.clocked_assert %{{.+}}, posedge %{{.+}} label "FIFO full when write enabled" : i1
+// A power-of-two depth: the pointer increment wraps on its own. Almost full
+// and almost empty are registers too.
+// CHECK-LABEL: hw.module @fifo2(
+// CHECK:         %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 1 : i64} : !seq.hlmem<4x!hw.array<2xi32>>
+// CHECK:         [[UP:%.+]] = comb.and %wrEn,
+// CHECK:         [[DOWN:%.+]] = comb.and %rdEn,
+// CHECK:         %fifo_full = seq.compreg sym @fifo_full {{%.+}}, %clk reset %rst, %false : i1
+// CHECK:         [[AT_3:%.+]] = comb.icmp eq %fifo_count, %c3_i3
+// CHECK:         %fifo_empty = seq.compreg sym @fifo_empty {{%.+}}, %clk reset %rst, %true : i1
+// CHECK-NEXT:    [[AT_1:%.+]] = comb.icmp eq %fifo_count, %c1_i3
+// CHECK:         [[WR_INC:%.+]] = comb.add %fifo_wr_addr, %c1_i2
+// CHECK-NEXT:    {{%.+}} = comb.mux %wrEn, [[WR_INC]], %fifo_wr_addr {sv.namehint = "fifo_wr_addr_next"}
+// CHECK-NEXT:    [[RD_INC:%.+]] = comb.add %fifo_rd_addr, %c1_i2
+// CHECK-NEXT:    {{%.+}} = comb.mux %rdEn, [[RD_INC]], %fifo_rd_addr {sv.namehint = "fifo_rd_addr_next"}
+// Almost full (count >= 2): set on reaching 2 from 1, cleared on leaving 2 down.
+// CHECK-NEXT:    %fifo_almost_full = seq.compreg sym @fifo_almost_full [[AF_NEXT:%.+]], %clk reset %rst, %false : i1
+// CHECK-NEXT:    %c2_i3 = hw.constant 2 : i3
+// CHECK-NEXT:    [[AT_2:%.+]] = comb.icmp eq %fifo_count, %c2_i3
+// CHECK-NEXT:    [[NOT_AT_2:%.+]] = comb.xor [[AT_2]], %true
+// CHECK-NEXT:    [[AF_UP:%.+]] = comb.or %fifo_almost_full, [[AT_1]]
+// CHECK-NEXT:    [[AF_DOWN:%.+]] = comb.and %fifo_almost_full, [[NOT_AT_2]]
+// CHECK-NEXT:    [[AF_MUX:%.+]] = comb.mux [[DOWN]], [[AF_DOWN]], %fifo_almost_full
+// CHECK-NEXT:    [[AF_NEXT]] = comb.mux [[UP]], [[AF_UP]], [[AF_MUX]]
+// Almost empty (count <= 1): cleared on leaving 1 up, set on reaching 1 from 2.
+// CHECK-NEXT:    %fifo_almost_empty = seq.compreg sym @fifo_almost_empty [[AE_NEXT:%.+]], %clk reset %rst, %true : i1
+// CHECK-NEXT:    [[NOT_AT_1:%.+]] = comb.xor [[AT_1]], %true
+// CHECK-NEXT:    [[AE_UP:%.+]] = comb.and %fifo_almost_empty, [[NOT_AT_1]]
+// CHECK-NEXT:    [[AE_DOWN:%.+]] = comb.or %fifo_almost_empty, [[AT_2]]
+// CHECK-NEXT:    [[AE_MUX:%.+]] = comb.mux [[DOWN]], [[AE_DOWN]], %fifo_almost_empty
+// CHECK-NEXT:    [[AE_NEXT]] = comb.mux [[UP]], [[AE_UP]], [[AE_MUX]]
+// CHECK:         verif.clocked_assert
+// CHECK:         verif.clocked_assert
+// CHECK-NEXT:    hw.output %fifo_mem_rdata, %fifo_empty, %fifo_full, %fifo_almost_empty, %fifo_almost_full
 !testType = !hw.array<2xi32>
 hw.module @fifo2(in %clk : !seq.clock, in %rst : i1, in %in : !testType, in %rdEn : i1, in %wrEn : i1, out out: !testType, out empty: i1, out full: i1, out almost_empty : i1, out almost_full : i1) {
   %out, %full, %empty, %almostFull, %almostEmpty = seq.fifo depth 4 rd_latency 1 almost_full 2 almost_empty 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : !testType
   hw.output %out, %empty, %full, %almostEmpty, %almostFull : !testType, i1, i1, i1, i1
 }
 
+// Thresholds of `depth` and 0 make almost full and almost empty the full and
+// empty flags.
+// CHECK-LABEL: hw.module @aliasedThresholds(
+// CHECK-NOT:     fifo_almost
+// CHECK:         hw.output %fifo_full, %fifo_empty : i1, i1
+hw.module @aliasedThresholds(in %clk : !seq.clock, in %rst : i1, in %in : i8, in %rdEn : i1, in %wrEn : i1, out af : i1, out ae : i1) {
+  %out, %full, %empty, %af, %ae = seq.fifo depth 8 almost_full 8 almost_empty 0 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i8
+  hw.output %af, %ae : i1, i1
+}
+
+// Thresholds of 0 and `depth` make almost full and almost empty constant.
+// CHECK-LABEL: hw.module @constantThresholds(
+// CHECK-NOT:     fifo_almost
+// CHECK:         hw.output %true, %true : i1, i1
+hw.module @constantThresholds(in %clk : !seq.clock, in %rst : i1, in %in : i8, in %rdEn : i1, in %wrEn : i1, out af : i1, out ae : i1) {
+  %out, %full, %empty, %af, %ae = seq.fifo depth 8 almost_full 0 almost_empty 8 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i8
+  hw.output %af, %ae : i1, i1
+}
+
+// Unused almost full and almost empty outputs get no registers.
+// CHECK-LABEL: hw.module @unusedThresholds(
+// CHECK-NOT:     fifo_almost
+// CHECK:         hw.output %fifo_full : i1
+hw.module @unusedThresholds(in %clk : !seq.clock, in %rst : i1, in %in : i8, in %rdEn : i1, in %wrEn : i1, out full : i1) {
+  %out, %full, %empty, %af, %ae = seq.fifo depth 8 almost_full 5 almost_empty 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i8
+  hw.output %full : i1
+}
+
+// A single entry: the pointers are zero-width and never move.
+// CHECK-LABEL: hw.module @depth1(
+// CHECK:         %fifo_rd_addr = seq.compreg sym @fifo_rd_addr %fifo_rd_addr, %clk reset %rst, %c0_i0 : i0
+// CHECK-NEXT:    %fifo_wr_addr = seq.compreg sym @fifo_wr_addr %fifo_wr_addr, %clk reset %rst, %c0_i0 : i0
+// CHECK-NOT:     comb.add %fifo_rd_addr
+// CHECK-NOT:     comb.add %fifo_wr_addr
+// CHECK:         hw.output %fifo_mem_rdata : i8
+hw.module @depth1(in %clk : !seq.clock, in %rst : i1, in %in : i8, in %rdEn : i1, in %wrEn : i1, out out : i8) {
+  %out, %full, %empty = seq.fifo depth 1 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i8
+  hw.output %out : i8
+}
+
 // With rd_latency > 1, the memory is still read in the cycle the entry is
 // popped, and the rest of the latency is registers on the read data. No read is
-// in flight when a popped slot is reused, so 'full' comes from 'fifo_count'.
-// CHECK-LABEL: hw.module @fifo3
-// CHECK-DAG:     %[[DEPTH:.+]] = hw.constant -4 : i3
-// CHECK-DAG:     %[[TWO:.+]] = hw.constant 2 : i3
+// in flight when a popped slot is reused, so the flags count only the entries
+// not yet popped.
+// CHECK-LABEL: hw.module @fifo3(
 // CHECK:         %fifo_mem_rdata = seq.read %fifo_mem[%fifo_rd_addr] rden %rdEn {latency = 1 : i64}
 // CHECK-NEXT:    %fifo_mem_rd_dly1 = seq.compreg sym @fifo_mem_rd_dly1 %fifo_mem_rdata, %clk : i32
 // CHECK-NEXT:    %fifo_mem_rd_dly2 = seq.compreg sym @fifo_mem_rd_dly2 %fifo_mem_rd_dly1, %clk : i32
-// CHECK:         %[[FULL:.+]] = comb.icmp eq %fifo_count, %[[DEPTH]] {sv.namehint = "fifo_full"} : i3
-// CHECK:         %[[AF:.+]] = comb.icmp ugt %fifo_count, %[[TWO]] {sv.namehint = "fifo_almost_full"} : i3
-// CHECK:         hw.output %fifo_mem_rd_dly2, %[[FULL]], %[[AF]] : i32, i1, i1
+// CHECK:         %fifo_full = seq.compreg sym @fifo_full
+// CHECK:         %fifo_almost_full = seq.compreg sym @fifo_almost_full
+// CHECK:         hw.output %fifo_mem_rd_dly2, %fifo_full, %fifo_almost_full : i32, i1, i1
 // CHECK-NOT:     fifo_used
 hw.module @fifo3(in %clk : !seq.clock, in %rst : i1, in %in : i32, in %rdEn : i1, in %wrEn : i1, out out : i32, out full : i1, out almost_full : i1) {
   %out, %full, %empty, %af = seq.fifo depth 4 rd_latency 3 almost_full 3 in %in rdEn %rdEn wrEn %wrEn clk %clk rst %rst : i32
