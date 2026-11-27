@@ -343,6 +343,13 @@ the memory in the cycle the entry is popped, and the rest of the latency is
 registers on the read data. So a popped slot can be reused at once, and on an
 FPGA the second register can be the RAM block's output register.
 
+A depth one short of a power of two (from 3) gets a memory of that power of two.
+The spare slot is always the one at the write pointer, so the memory is written
+every cycle, without a write enable, and the pointers wrap without a compare.
+In FPGA block RAM the extra entry costs nothing, so a depth of, say, 2047 rather
+than 2048 also takes the write enable off the RAM blocks and narrows the
+occupancy count by a bit.
+
 ## State Initialization
 
 While ASICs might not have explicit initial values, they are crucial for simulation

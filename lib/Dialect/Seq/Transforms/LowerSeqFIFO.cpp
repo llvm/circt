@@ -52,7 +52,14 @@ public:
     uint64_t depth = mem.getDepth();
     Type i1Type = rewriter.getI1Type();
     Type countType = rewriter.getIntegerType(llvm::Log2_64_Ceil(depth + 1));
-    unsigned ptrWidth = llvm::Log2_64_Ceil(depth);
+    // A depth one short of a power of two (from 3) gets a memory of that power
+    // of two. The spare slot is the one at the write pointer, which never holds
+    // an entry, so the memory is written every cycle, without a write enable,
+    // and the pointers wrap on their own. In FPGA block RAM the extra entry is
+    // free.
+    bool spareSlot = depth >= 3 && llvm::isPowerOf2_64(depth + 1);
+    uint64_t memDepth = spareSlot ? depth + 1 : depth;
+    unsigned ptrWidth = llvm::Log2_64_Ceil(memDepth);
     Type ptrType = rewriter.getIntegerType(ptrWidth);
 
     // Operands that create ops are built into locals before they are combined:
@@ -83,7 +90,7 @@ public:
     // FIFO leaves reset empty, so nothing written during reset is ever read.
     seq::HLMemOp hlmem = seq::HLMemOp::create(
         rewriter, loc, clk, constant(i1Type, 0), "fifo_mem",
-        llvm::SmallVector<int64_t>{static_cast<int64_t>(depth)}, eltType);
+        llvm::SmallVector<int64_t>{static_cast<int64_t>(memDepth)}, eltType);
     Value rdAddr = makeReg(rdAddrNext, ptrType, 0, "fifo_rd_addr");
     Value wrAddr = makeReg(wrAddrNext, ptrType, 0, "fifo_wr_addr");
 
@@ -100,10 +107,10 @@ public:
       readData = seq::CompRegOp::create(
           rewriter, loc, readData, clk,
           rewriter.getStringAttr("fifo_mem_rd_dly" + std::to_string(i)));
-    seq::WritePortOp::create(rewriter, loc, hlmem,
-                             llvm::SmallVector<Value>{wrAddr},
-                             adaptor.getInput(), wrEn,
-                             /*latency*/ 1);
+    seq::WritePortOp::create(
+        rewriter, loc, hlmem, llvm::SmallVector<Value>{wrAddr},
+        adaptor.getInput(), spareSlot ? constant(i1Type, 1) : wrEn,
+        /*latency*/ 1);
 
     // ====== Occupancy ======
     Value countUp = comb::AndOp::create(
@@ -165,7 +172,7 @@ public:
 
     // ====== Read/write pointers ======
     // The wrap test looks at the current pointer, in parallel with the
-    // increment. With a power-of-two depth the increment wraps on its own.
+    // increment. With a power-of-two memory the increment wraps on its own.
     auto advance = [&](Backedge ptrNext, Value ptr, Value enable,
                        StringRef name) {
       if (ptrWidth == 0) {
@@ -174,10 +181,10 @@ public:
       }
       Value next =
           comb::AddOp::create(rewriter, loc, ptr, constant(ptrType, 1));
-      if (!llvm::isPowerOf2_64(depth)) {
+      if (!llvm::isPowerOf2_64(memDepth)) {
         Value wrap =
             comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq, ptr,
-                                 constant(ptrType, depth - 1));
+                                 constant(ptrType, memDepth - 1));
         next = mux(wrap, constant(ptrType, 0), next);
       }
       ptrNext.setValue(mux(enable, next, ptr));
