@@ -21,4 +21,10 @@ def FVIntegerAttr : AttrDef<MooreDialect, "FVInteger"> {
   let returnType = "circt::FVInt";
 }
 
+// "Forward-declare" `hw::ParamDeclAttr` rather than including `HWAttributes.td`
+// so HW enums are not pulled into `MooreEnums.{h,cpp}.inc`.
+def HWParamDeclAttr : Attr<CPred<"llvm::isa<hw::ParamDeclAttr>($_self)">,
+                           "parameter declaration attribute">;
+def ParamDeclArrayAttr : TypedArrayAttrBase<HWParamDeclAttr, "parameter array">;
+
 #endif // CIRCT_DIALECT_MOORE_MOOREATTRIBUTES

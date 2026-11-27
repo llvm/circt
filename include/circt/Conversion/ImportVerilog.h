@@ -59,6 +59,13 @@ struct ImportVerilogOptions {
   /// Interpret `always @(*)` as `always_comb`.
   bool lowerAlwaysAtStarAsComb = true;
 
+  /// Import modules marked with `(* blackbox *)` (and not explicitly disabled,
+  /// e.g. `(* blackbox = 0 *)`) as `moore.module.extern` declarations without
+  /// lowering their bodies, preserving elaborated parameter bindings on
+  /// `moore.instance` ops and the original Verilog module name via
+  /// `verilogName` when uniquified.
+  bool externalizeBlackboxes = false;
+
   //===--------------------------------------------------------------------===//
   // Include paths
   //===--------------------------------------------------------------------===//

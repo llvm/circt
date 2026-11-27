@@ -354,19 +354,19 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   return comb::MuxOp::create(builder, loc, isZero, lo, max, false);
 }
 
-/// Get the ModulePortInfo from a SVModuleOp.
+/// Get the ModulePortInfo from a module op and its `hw::ModuleType`.
 static FailureOr<hw::ModulePortInfo>
-getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
+getModulePortInfo(const TypeConverter &typeConverter, Operation *op,
+                  hw::ModuleType moduleTy) {
   size_t inputNum = 0;
   size_t resultNum = 0;
-  auto moduleTy = op.getModuleType();
   SmallVector<hw::PortInfo> ports;
   ports.reserve(moduleTy.getNumPorts());
 
   for (auto port : moduleTy.getPorts()) {
     Type portTy = typeConverter.convertType(port.type);
     if (!portTy) {
-      return op.emitOpError("port '")
+      return op->emitOpError("port '")
              << port.name << "' has unsupported type " << port.type
              << " that cannot be converted to hardware type";
     }
@@ -399,7 +399,8 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
     rewriter.setInsertionPoint(op);
 
     // Create the hw.module to replace moore.module
-    auto portInfo = getModulePortInfo(*typeConverter, op);
+    FailureOr<hw::ModulePortInfo> portInfo =
+        getModulePortInfo(*typeConverter, op, op.getModuleType());
     if (failed(portInfo))
       return failure();
 
@@ -419,6 +420,34 @@ struct SVModuleOpConversion : public OpConversionPattern<SVModuleOp> {
                                 hwModuleOp.getBodyRegion().end());
 
     // Erase the original op
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct SVModuleExternOpConversion
+    : public OpConversionPattern<SVModuleExternOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SVModuleExternOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.setInsertionPoint(op);
+
+    FailureOr<hw::ModulePortInfo> portInfo =
+        getModulePortInfo(*typeConverter, op, op.getModuleType());
+    if (failed(portInfo))
+      return failure();
+
+    StringRef verilogName = op.getVerilogName().value_or(StringRef());
+    auto hwExternOp = hw::HWModuleExternOp::create(
+        rewriter, op.getLoc(), op.getSymNameAttr(), *portInfo, verilogName,
+        op.getParameters());
+    if (auto svAttrs = sv::getSVAttributes(op))
+      sv::setSVAttributes(hwExternOp, svAttrs);
+    SymbolTable::setSymbolVisibility(hwExternOp,
+                                     SymbolTable::getSymbolVisibility(op));
+
     rewriter.eraseOp(op);
     return success();
   }
@@ -449,7 +478,7 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
     auto instOp = hw::InstanceOp::create(
         rewriter, op.getLoc(), op.getResultTypes(), instName, moduleName,
         op.getInputs(), op.getInputNamesAttr(), op.getOutputNamesAttr(),
-        /*parameters=*/rewriter.getArrayAttr({}), /*inner_sym=*/nullptr,
+        /*parameters=*/op.getParameters(), /*inner_sym=*/nullptr,
         /*doNotPrint=*/nullptr);
     if (ArrayAttr svAttrs = sv::getSVAttributes(op))
       sv::setSVAttributes(instOp, svAttrs);
@@ -4339,6 +4368,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Patterns of structural operations.
     SVModuleOpConversion,
+    SVModuleExternOpConversion,
     InstanceOpConversion,
     ProcedureOpConversion,
     CoroutineOpConversion,

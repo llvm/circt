@@ -12,6 +12,8 @@
 
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/HW/CustomDirectiveImpl.h"
+#include "circt/Dialect/HW/HWInstanceImplementation.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
@@ -110,6 +112,118 @@ OutputOp SVModuleOp::getOutputOp() {
 OperandRange SVModuleOp::getOutputs() { return getOutputOp().getOperands(); }
 
 //===----------------------------------------------------------------------===//
+// SVModuleExternOp
+//===----------------------------------------------------------------------===//
+
+void SVModuleExternOp::build(mlir::OpBuilder &builder,
+                             mlir::OperationState &state, llvm::StringRef name,
+                             hw::ModuleType type, mlir::ArrayAttr parameters,
+                             llvm::StringRef verilogName) {
+  state.addAttribute(getSymNameAttrName(state.name),
+                     builder.getStringAttr(name));
+  state.addAttribute(getModuleTypeAttrName(state.name), TypeAttr::get(type));
+  if (!parameters)
+    parameters = builder.getArrayAttr({});
+  state.addAttribute(getParametersAttrName(state.name), parameters);
+  if (!verilogName.empty())
+    state.addAttribute(getVerilogNameAttrName(state.name),
+                       builder.getStringAttr(verilogName));
+}
+
+StringAttr SVModuleExternOp::getVerilogModuleNameAttr() {
+  if (auto name = getVerilogNameAttr())
+    return name;
+  return getSymNameAttr();
+}
+
+void SVModuleExternOp::print(OpAsmPrinter &p) {
+  p << " ";
+
+  // Print the visibility of the module.
+  StringRef visibilityAttrName =
+      mlir::SymbolOpInterface::getDefaultVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+
+  p.printSymbolName(SymbolTable::getSymbolName(*this).getValue());
+  printOptionalParameterList(p, getOperation(), getParameters());
+  Region emptyRegion;
+  hw::module_like_impl::printModuleSignatureNew(p, emptyRegion, getModuleType(),
+                                                {}, {});
+  p.printOptionalAttrDictWithKeyword(
+      getOperation()->getAttrs(),
+      {getSymNameAttrName(), getModuleTypeAttrName(),
+       getSymVisibilityAttrName(), getParametersAttrName()});
+}
+
+ParseResult SVModuleExternOp::parse(OpAsmParser &parser,
+                                    OperationState &result) {
+  // Parse the visibility attribute.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  // Parse the module name.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, getSymNameAttrName(result.name),
+                             result.attributes))
+    return failure();
+
+  // Parse the optional parameter list.
+  ArrayAttr parameters;
+  if (parseOptionalParameterList(parser, parameters))
+    return failure();
+  result.addAttribute(getParametersAttrName(result.name), parameters);
+
+  // Parse the ports.
+  SmallVector<hw::module_like_impl::PortParse> ports;
+  TypeAttr modType;
+  if (failed(
+          hw::module_like_impl::parseModuleSignature(parser, ports, modType)))
+    return failure();
+  result.addAttribute(getModuleTypeAttrName(result.name), modType);
+
+  // Parse the optional attributes.
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  return success();
+}
+
+LogicalResult SVModuleExternOp::verify() {
+  SmallPtrSet<Attribute, 4> paramNames;
+  hw::instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        InFlightDiagnostic diag = emitOpError();
+        fn(diag);
+      };
+
+  for (auto param : getParameters()) {
+    auto paramAttr = cast<hw::ParamDeclAttr>(param);
+    if (!paramNames.insert(paramAttr.getName()).second)
+      return emitOpError("parameter ")
+             << paramAttr << " has the same name as a previous parameter";
+
+    Attribute value = paramAttr.getValue();
+    if (!value)
+      continue;
+
+    auto typedValue = dyn_cast<TypedAttr>(value);
+    if (!typedValue)
+      return emitOpError("parameter ")
+             << paramAttr << " should have a typed value; has value " << value;
+
+    if (typedValue.getType() != paramAttr.getType())
+      return emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.getType()
+             << "; has type " << typedValue.getType();
+
+    if (failed(hw::checkParameterInContext(value, getParameters(), emitError,
+                                           /*disallowParamRefs=*/true)))
+      return failure();
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // OutputOp
 //===----------------------------------------------------------------------===//
 
@@ -145,43 +259,83 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!symbol)
     return emitOpError("references unknown symbol @") << getModuleName();
 
-  // Check that the symbol is a SVModuleOp.
-  auto module = dyn_cast<SVModuleOp>(symbol);
-  if (!module)
-    return emitOpError("must reference a 'moore.module', but @")
+  // Check that the symbol is a SVModuleOp or SVModuleExternOp.
+  hw::ModuleType moduleType;
+  StringRef symName;
+  ArrayAttr modParameters;
+  if (auto module = dyn_cast<SVModuleOp>(symbol)) {
+    moduleType = module.getModuleType();
+    symName = module.getSymName();
+  } else if (auto externMod = dyn_cast<SVModuleExternOp>(symbol)) {
+    moduleType = externMod.getModuleType();
+    symName = externMod.getSymName();
+    modParameters = externMod.getParameters();
+  } else {
+    return emitOpError("must reference a 'moore.module' or "
+                       "'moore.module.extern', but @")
            << getModuleName() << " is a '" << symbol->getName() << "'";
+  }
 
   // Check that the input ports match.
-  auto moduleType = module.getModuleType();
   auto inputTypes = moduleType.getInputTypes();
 
   if (inputTypes.size() != getNumOperands())
     return emitOpError("has ")
-           << getNumOperands() << " operands, but target module @"
-           << module.getSymName() << " has " << inputTypes.size() << " inputs";
+           << getNumOperands() << " operands, but target module @" << symName
+           << " has " << inputTypes.size() << " inputs";
 
   for (unsigned i = 0, e = inputTypes.size(); i != e; ++i)
     if (inputTypes[i] != getOperand(i).getType())
       return emitOpError() << "operand " << i << " (" << getOperand(i).getType()
                            << ") does not match input type (" << inputTypes[i]
-                           << ") of module @" << module.getSymName();
+                           << ") of module @" << symName;
 
   // Check that the output ports match.
   auto outputTypes = moduleType.getOutputTypes();
 
   if (outputTypes.size() != getNumResults())
     return emitOpError("has ")
-           << getNumOperands() << " results, but target module @"
-           << module.getSymName() << " has " << outputTypes.size()
-           << " outputs";
+           << getNumResults() << " results, but target module @" << symName
+           << " has " << outputTypes.size() << " outputs";
 
   for (unsigned i = 0, e = outputTypes.size(); i != e; ++i)
     if (outputTypes[i] != getResult(i).getType())
       return emitOpError() << "result " << i << " (" << getResult(i).getType()
                            << ") does not match output type (" << outputTypes[i]
-                           << ") of module @" << module.getSymName();
+                           << ") of module @" << symName;
 
-  return success();
+  // Check that parameters match the target module.
+  ArrayAttr instParameters = getParameters();
+  if (!modParameters) {
+    if (!instParameters.empty())
+      return emitOpError("cannot pass parameters to non-extern module @")
+             << symName;
+    return success();
+  }
+
+  hw::instance_like_impl::EmitErrorFn emitError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        InFlightDiagnostic diag = emitOpError();
+        if (fn(diag))
+          diag.attachNote(symbol->getLoc()) << "module declared here";
+      };
+
+  SmallVector<Type> modParamTypes;
+  modParamTypes.reserve(modParameters.size());
+  for (auto paramDecl : modParameters.getAsRange<hw::ParamDeclAttr>())
+    modParamTypes.push_back(paramDecl.getType());
+
+  if (failed(hw::instance_like_impl::verifyParameters(
+          instParameters, modParameters, modParamTypes, emitError)))
+    return failure();
+
+  hw::instance_like_impl::EmitErrorFn emitStructError =
+      [&](const std::function<bool(InFlightDiagnostic &)> &fn) {
+        InFlightDiagnostic diag = emitOpError();
+        fn(diag);
+      };
+  return hw::instance_like_impl::verifyParameterStructure(
+      instParameters, ArrayAttr::get(getContext(), {}), emitStructError);
 }
 
 void InstanceOp::print(OpAsmPrinter &p) {
@@ -189,6 +343,7 @@ void InstanceOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(getInstanceNameAttr());
   p << " ";
   p.printAttributeWithoutType(getModuleNameAttr());
+  printOptionalParameterList(p, getOperation(), getParameters());
   printInputPortList(p, getOperation(), getInputs(), getInputs().getTypes(),
                      getInputNames());
   p << " -> ";
@@ -207,6 +362,12 @@ ParseResult InstanceOp::parse(OpAsmParser &parser, OperationState &result) {
   FlatSymbolRefAttr moduleName;
   if (parser.parseAttribute(moduleName, "moduleName", result.attributes))
     return failure();
+
+  // Parse optional parameters.
+  ArrayAttr parameters;
+  if (parseOptionalParameterList(parser, parameters))
+    return failure();
+  result.addAttribute("parameters", parameters);
 
   // Parse the input port list.
   auto loc = parser.getCurrentLocation();

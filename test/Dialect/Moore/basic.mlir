@@ -10,6 +10,31 @@ moore.module @EmptyWithAttrs() attributes {sv.attributes = [#sv.attribute<"foo">
   // CHECK: moore.output
 }
 
+// CHECK-LABEL: moore.module.extern @ExternEmpty()
+moore.module.extern @ExternEmpty()
+
+// CHECK-LABEL: moore.module.extern private @ExternPorts(in %a : !moore.l8, out b : !moore.l8) attributes {sv.attributes = [#sv.attribute<"blackbox">], verilogName = "OrigExtern"}
+moore.module.extern private @ExternPorts(in %a : !moore.l8, out b : !moore.l8) attributes {sv.attributes = [#sv.attribute<"blackbox">], verilogName = "OrigExtern"}
+
+// CHECK-LABEL: moore.module.extern private @ExternParams<W: si32, MASK: ui8, GAIN: f64, NAME: none, T: none>(in %in : !moore.l8, out out : !moore.l8) attributes {verilogName = "param_sram"}
+moore.module.extern private @ExternParams<W: si32, MASK: ui8, GAIN: f64, NAME: none, T: none>(in %in : !moore.l8, out out : !moore.l8) attributes {verilogName = "param_sram"}
+
+// CHECK-LABEL: moore.module.extern private @ExternWithDefault<W: si32 = 16>()
+moore.module.extern private @ExternWithDefault<W: si32 = 16>()
+
+// CHECK-LABEL: moore.module @ExternInstUser(in %x : !moore.l8, out y : !moore.l8)
+moore.module @ExternInstUser(in %x : !moore.l8, out y : !moore.l8) {
+  // CHECK: moore.instance "u_empty" @ExternEmpty() -> ()
+  moore.instance "u_empty" @ExternEmpty() -> ()
+  // CHECK: %[[U_PORTS_B:.*]] = moore.instance "u_ports" @ExternPorts(a: %x: !moore.l8) -> (b: !moore.l8)
+  %0 = moore.instance "u_ports" @ExternPorts(a: %x: !moore.l8) -> (b: !moore.l8)
+  // CHECK: %[[U_PARAMS_OUT:.*]] = moore.instance "u_params" @ExternParams<W: si32 = 8, MASK: ui8 = 255, GAIN: f64 = 1.500000e+00, NAME: none = "ram", T: none = #hw.param.verbatim<"logic[7:0]">>(in: %[[U_PORTS_B]]: !moore.l8) -> (out: !moore.l8)
+  %1 = moore.instance "u_params" @ExternParams<W: si32 = 8, MASK: ui8 = 255, GAIN: f64 = 1.5, NAME: none = "ram", T: none = #hw.param.verbatim<"logic[7:0]">>(in: %0: !moore.l8) -> (out: !moore.l8)
+  // CHECK: moore.instance "u_def" @ExternWithDefault<W: si32 = 32>() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+  moore.instance "u_def" @ExternWithDefault<W: si32 = 32>() -> () {sv.attributes = [#sv.attribute<"keep_hierarchy">]}
+  moore.output %1 : !moore.l8
+}
+
 // CHECK-LABEL: moore.module @Ports
 moore.module @Ports(
   // CHECK-SAME: in %a : !moore.string

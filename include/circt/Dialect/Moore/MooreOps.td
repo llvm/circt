@@ -96,6 +96,51 @@ def SVModuleOp : MooreOp<"module", [
   }];
 }
 
+def SVModuleExternOp : MooreOp<"module.extern", [
+  SymbolName, SymbolVisibility, Symbol,
+]> {
+  let summary = "An external module declaration";
+  let description = [{
+    The `moore.module.extern` operation represents an external reference to a
+    SystemVerilog module (for example, a `(* blackbox *)` module), including its
+    name, optional parameter declarations, and port list, without a body region.
+
+    The optional `verilogName` attribute specifies the original module name in
+    SystemVerilog when the MLIR symbol name has been uniquified (for example,
+    when a parameterized external module is instantiated with multiple parameter
+    sets). Value-less `parameters` entries require `moore.instance` ops to
+    supply explicit parameter bindings.
+
+    See IEEE 1800-2017 § 3.3 "Modules" and § 23.2 "Module definitions".
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<ModuleType>:$module_type,
+    OptionalAttr<StrAttr>:$sym_visibility,
+    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters,
+    OptionalAttr<StrAttr>:$verilogName
+  );
+  let results = (outs);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [OpBuilder<
+    (ins "StringRef":$name, "hw::ModuleType":$type,
+         CArg<"ArrayAttr", "{}">:$parameters,
+         CArg<"StringRef", "StringRef()">:$verilogName)>];
+
+  let extraClassDeclaration = [{
+    /// Return the name to use for the Verilog module referenced by this
+    /// declaration. This is typically the symbol name, but can be overridden
+    /// with the `verilogName` attribute.
+    StringAttr getVerilogModuleNameAttr();
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
+  }];
+}
+
 def OutputOp : MooreOp<"output", [
   Terminator, HasParent<"SVModuleOp">, Pure, ReturnLike
 ]> {
@@ -121,7 +166,9 @@ def InstanceOp : MooreOp<"instance", [
 ]> {
   let summary = "Create an instance of a module";
   let description = [{
-    The `moore.instance` operation instantiates a `moore.module` operation.
+    The `moore.instance` operation instantiates a `moore.module` or
+    `moore.module.extern` operation. Non-empty `parameters` are only permitted
+    when instantiating a `moore.module.extern` operation.
 
     See IEEE 1800-2017 § 23.3 "Module instances".
   }];
@@ -131,7 +178,8 @@ def InstanceOp : MooreOp<"instance", [
     FlatSymbolRefAttr:$moduleName,
     Variadic<AnyType>:$inputs,
     StrArrayAttr:$inputNames,
-    StrArrayAttr:$outputNames
+    StrArrayAttr:$outputNames,
+    DefaultValuedAttr<ParamDeclArrayAttr, "{}">:$parameters
   );
   let results = (outs Variadic<AnyType>:$outputs);
   let hasCustomAssemblyFormat = 1;
