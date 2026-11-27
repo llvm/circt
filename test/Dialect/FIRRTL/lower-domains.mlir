@@ -769,3 +769,61 @@ firrtl.circuit "DomainAnyRef" {
     firrtl.propassign %ref, %0 : !firrtl.anyref
   }
 }
+
+// -----
+
+// Reads of an instance input domain port go through a wire,
+// as the lowered port is a property sink and cannot be read.
+// The read may precede the driver.
+// See: https://github.com/llvm/circt/issues/11601
+firrtl.circuit "ReadInstanceInput" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>]
+  firrtl.extmodule @Bar(in A: !firrtl.domain<@ClockDomain(name: !firrtl.string)>)
+  // CHECK-LABEL: firrtl.module @ReadInstanceInput(
+  firrtl.module @ReadInstanceInput(
+    in %A: !firrtl.domain<@ClockDomain(name: !firrtl.string)>,
+    out %B: !firrtl.domain<@ClockDomain(name: !firrtl.string)>,
+    out %name: !firrtl.string
+  ) {
+    // CHECK:      %[[B_domainInfo_in:.+]] = firrtl.object.subfield %B_object[domainInfo_in]
+    // CHECK:      %bar_A, %bar_A_out = firrtl.instance bar @Bar(
+    // CHECK-NEXT: %[[wire:.+]] = firrtl.wire {{.*}}: !firrtl.class<@ClockDomain(
+    // CHECK-NEXT: %[[name_out:.+]] = firrtl.object.subfield %[[wire]][name_out]
+    // CHECK-NEXT: firrtl.propassign %name, %[[name_out]]
+    // CHECK-NEXT: firrtl.propassign %[[B_domainInfo_in]], %[[wire]] :
+    // CHECK-NEXT: firrtl.propassign %[[wire]], %A :
+    // CHECK-NEXT: firrtl.propassign %bar_A, %[[wire]] :
+    %bar_A = firrtl.instance bar @Bar(in A: !firrtl.domain<@ClockDomain(name: !firrtl.string)>)
+    %0 = firrtl.domain.subfield %bar_A[name] : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+    firrtl.propassign %name, %0 : !firrtl.string
+    firrtl.domain.define %B, %bar_A : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+    firrtl.domain.define %bar_A, %A : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+  }
+}
+
+// -----
+
+// Reads of an output domain port go through a wire,
+// as the lowered port is a property sink and cannot be read.
+firrtl.circuit "ReadOutput" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"name", !firrtl.string>]
+  // CHECK-LABEL: firrtl.module @ReadOutput(
+  firrtl.module @ReadOutput(
+    out %A: !firrtl.domain<@ClockDomain(name: !firrtl.string)>,
+    out %name: !firrtl.string
+  ) {
+    // CHECK-NEXT: %[[wire:.+]] = firrtl.wire : !firrtl.class<@ClockDomain(
+    // CHECK-NEXT: %A_object = firrtl.object @ClockDomain_out(
+    // CHECK-NEXT: %[[A_domainInfo_in:.+]] = firrtl.object.subfield %A_object[domainInfo_in]
+    // CHECK:      %[[name_out:.+]] = firrtl.object.subfield %[[wire]][name_out]
+    // CHECK-NEXT: firrtl.propassign %name, %[[name_out]]
+    // CHECK:      %d = firrtl.object @ClockDomain(
+    // CHECK:      firrtl.propassign %[[wire]], %d :
+    // CHECK-NEXT: firrtl.propassign %[[A_domainInfo_in]], %[[wire]] :
+    %0 = firrtl.domain.subfield %A[name] : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+    firrtl.propassign %name, %0 : !firrtl.string
+    %1 = firrtl.string "x"
+    %d = firrtl.domain.create(%1) : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+    firrtl.domain.define %A, %d : !firrtl.domain<@ClockDomain(name: !firrtl.string)>
+  }
+}
