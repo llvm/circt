@@ -40,19 +40,32 @@ private:
   MlirType type;
 };
 
+/// Wraps an OM option evaluator value. The payload is converted to Python only
+/// when accessed, since it may refer back to the option.
+struct Option {
+  explicit Option(OMEvaluatorValue value) : value(value) {}
+
+  static Option getEmpty(MlirType type);
+  static Option getSome(const nb::object &payload, MlirContext ctx);
+
+  MlirType getType() const { return omEvaluatorValueGetType(value); }
+  bool hasValue() const { return omEvaluatorOptionHasValue(value); }
+  nb::object getPayload() const;
+  OMEvaluatorValue getValue() const { return value; }
+
+private:
+  OMEvaluatorValue value;
+};
+
 /// These are the Python types that are represented by the different primitive
 /// OMEvaluatorValues as Attributes.
 using PythonPrimitive = std::variant<nb::int_, nb::float_, nb::str, nb::bool_,
                                      nb::tuple, nb::list, nb::dict>;
 
-/// None is used to by nanobind when default initializing a PythonValue. The
-/// order of types in the variant matters here, and we want nanobind to try
-/// casting to the Python classes defined in this file first, before
-/// MlirAttribute and the upstream MLIR type casters.  If the MlirAttribute
-/// is tried first, then we can hit an assert inside the MLIR codebase.
-struct None {};
-using PythonValue =
-    std::variant<None, Object, List, BasePath, Path, Unknown, PythonPrimitive>;
+/// Nanobind tries the wrapper classes before the primitive types.
+/// std::monostate represents Python None, which is rejected during conversion.
+using PythonValue = std::variant<std::monostate, Option, Object, List, BasePath,
+                                 Path, Unknown, PythonPrimitive>;
 
 /// Map an opaque OMEvaluatorValue into a python value.
 PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result);
@@ -361,6 +374,9 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
   if (omEvaluatorValueIsUnknown(result))
     return Unknown(omEvaluatorValueGetType(result));
 
+  if (omEvaluatorValueIsAOption(result))
+    return Option(result);
+
   // If the field was an Object, return a new Object.
   if (omEvaluatorValueIsAObject(result))
     return Object(result);
@@ -384,6 +400,13 @@ PythonValue omEvaluatorValueToPythonValue(OMEvaluatorValue result) {
 
 OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
                                                MlirContext ctx) {
+  if (std::holds_alternative<std::monostate>(result))
+    throw nb::type_error(
+        "None is not an OM value; use om.Option.empty(option_type)");
+
+  if (auto *option = std::get_if<Option>(&result))
+    return option->getValue();
+
   if (auto *list = std::get_if<List>(&result))
     return list->getValue();
 
@@ -406,6 +429,26 @@ OMEvaluatorValue pythonValueToOMEvaluatorValue(PythonValue result,
 
 } // namespace
 
+nb::object Option::getPayload() const {
+  if (!hasValue())
+    throw nb::value_error("Cannot get the value of an empty OM option");
+  return nb::cast(
+      omEvaluatorValueToPythonValue(omEvaluatorOptionGetValue(value)));
+}
+
+Option Option::getEmpty(MlirType type) {
+  if (!omTypeIsAOptionType(type))
+    throw nb::type_error("Expected an OM OptionType");
+  return Option(omEvaluatorOptionGetEmpty(type));
+}
+
+Option Option::getSome(const nb::object &payload, MlirContext ctx) {
+  auto value =
+      pythonValueToOMEvaluatorValue(nb::cast<PythonValue>(payload), ctx);
+  auto type = omOptionTypeGet(omEvaluatorValueGetType(value));
+  return Option(omEvaluatorOptionGet(type, value));
+}
+
 /// Populate the OM Python module.
 void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   m.doc() = "OM dialect Python native extension";
@@ -417,6 +460,16 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
            nb::arg("class_name"), nb::arg("actual_params"))
       .def_prop_ro("module", &Evaluator::getModule,
                    "The Module the Evaluator is built from");
+
+  // Add the Option class definition.
+  nb::class_<Option>(m, "Option")
+      .def(nb::init<Option>(), nb::arg("option"))
+      .def_static("empty", &Option::getEmpty, nb::arg("type"))
+      .def_static("some", &Option::getSome, nb::arg("value").none(),
+                  nb::arg("context") = nb::none())
+      .def_prop_ro("type", &Option::getType)
+      .def_prop_ro("has_value", &Option::hasValue)
+      .def_prop_ro("value", &Option::getPayload);
 
   // Add the List class definition.
   nb::class_<List>(m, "List")
@@ -507,6 +560,15 @@ void circt::python::populateDialectOMSubmodule(nb::module_ &m) {
   // Add the ListType class definition.
   mlir_type_subclass(m, "ListType", omTypeIsAListType, omListTypeGetTypeID)
       .def_property_readonly("element_type", omListTypeGetElementType);
+
+  // Add the OptionType class definition.
+  mlir_type_subclass(m, "OptionType", omTypeIsAOptionType,
+                     omOptionTypeGetTypeID)
+      .def_classmethod("get",
+                       [](const nb::object &cls, MlirType elementType) {
+                         return cls(omOptionTypeGet(elementType));
+                       })
+      .def_property_readonly("element_type", omOptionTypeGetElementType);
 
   // Add the PathType class definition.
   mlir_type_subclass(m, "PathType", omTypeIsAFrozenPathType,
