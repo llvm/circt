@@ -28,6 +28,8 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LogicalResult.h"
 
 namespace circt {
@@ -100,8 +102,8 @@ struct LTLImplicationConversion
   matchAndRewrite(ltl::ImplicationOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Can only lower boolean implications to comb ops
-    if (!isa<IntegerType>(op.getAntecedent().getType()) ||
-        !isa<IntegerType>(op.getConsequent().getType()))
+    if (!isa<IntegerType>(adaptor.getAntecedent().getType()) ||
+        !isa<IntegerType>(adaptor.getConsequent().getType()))
       return failure();
     /// A -> B = !A || B
     auto loc = op.getLoc();
@@ -120,7 +122,7 @@ struct LTLNotConversion : public OpConversionPattern<ltl::NotOp> {
   matchAndRewrite(ltl::NotOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Can only lower boolean nots to comb ops
-    if (!isa<IntegerType>(op.getInput().getType()))
+    if (!isa<IntegerType>(adaptor.getInput().getType()))
       return failure();
     auto loc = op.getLoc();
     auto inverted = comb::createOrFoldNot(rewriter, loc, adaptor.getInput());
@@ -136,8 +138,8 @@ struct LTLAndOpConversion : public OpConversionPattern<ltl::AndOp> {
   matchAndRewrite(ltl::AndOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Can only lower boolean ands to comb ops
-    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
-        !isa<IntegerType>(op->getOperandTypes()[1]))
+    if (!llvm::all_of(adaptor.getOperands().getTypes(),
+                      [](Type type) { return isa<IntegerType>(type); }))
       return failure();
     auto loc = op.getLoc();
     // Explicit twoState value to disambiguate builders
@@ -155,8 +157,8 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
   matchAndRewrite(ltl::OrOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Can only lower boolean ors to comb ops
-    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
-        !isa<IntegerType>(op->getOperandTypes()[1]))
+    if (!llvm::all_of(adaptor.getOperands().getTypes(),
+                      [](Type type) { return isa<IntegerType>(type); }))
       return failure();
     auto loc = op.getLoc();
     // Explicit twoState value to disambiguate builders
@@ -174,8 +176,8 @@ struct LTLIntersectOpConversion : public OpConversionPattern<ltl::IntersectOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Can only lower boolean intersects to comb ops; booleans are
     // instantaneous matches, so intersection is conjunction.
-    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
-        !isa<IntegerType>(op->getOperandTypes()[1]))
+    if (!llvm::all_of(adaptor.getOperands().getTypes(),
+                      [](Type type) { return isa<IntegerType>(type); }))
       return failure();
     auto loc = op.getLoc();
     // Explicit twoState value to disambiguate builders
@@ -274,6 +276,69 @@ struct LowerLTLToCorePass
 };
 } // namespace
 
+static inline bool isBooleanLTLOp(Operation *op) {
+  return isa<ltl::ImplicationOp, ltl::NotOp, ltl::AndOp, ltl::OrOp,
+             ltl::IntersectOp>(op);
+}
+
+/// If \op is part of a multi-op boolean expression (e.g., a |-> (b |-> c) )
+/// collect the whole connected component of boolean ops (i.e. the full boolean
+/// chain and its intermediate uses) and check that:
+///
+///  1. all incoming egdes (operands) are integers
+///  2. all outgoing edges (uses) are asserts/assumes, or integer results
+///
+/// The whole component is always explored fully and returned in \component.
+static bool isLowerableBooleanComponent(Operation *op,
+                                        DenseSet<Operation *> &component) {
+  if (!isBooleanLTLOp(op))
+    return false;
+
+  SmallVector<Operation *> worklist = {op};
+  bool isLowerable = true;
+  while (!worklist.empty()) {
+    Operation *op = worklist.pop_back_val();
+    component.insert(op);
+
+    // Backward: non-integer operands must come from boolean LTL ops.
+    for (Value operand : op->getOperands()) {
+      // int operand: end of the connected component
+      if (isa<IntegerType>(operand.getType()))
+        continue;
+      Operation *def = operand.getDefiningOp();
+      if (!def || !isBooleanLTLOp(def)) {
+        // operand does not come from bool LTL op: don't lower
+        isLowerable = false;
+        continue;
+      }
+      if (component.insert(def).second)
+        worklist.push_back(def);
+    }
+
+    // Forward: non-integer results may only go to asserts/assumes or to other
+    for (Value result : op->getResults()) {
+      // int result: end of the connected component
+      if (isa<IntegerType>(result.getType()))
+        continue;
+      for (Operation *user : result.getUsers()) {
+        // assert/assume user: end of the connected component
+        if (isa<verif::AssertOp, verif::ClockedAssertOp, verif::AssumeOp,
+                verif::ClockedAssumeOp>(user))
+          continue;
+        // user is not a bool op or an assert/assume: don't lower
+        if (!isBooleanLTLOp(user)) {
+          isLowerable = false;
+          continue;
+        }
+        if (component.insert(user).second)
+          worklist.push_back(user);
+      }
+    }
+  }
+
+  return isLowerable;
+}
+
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
   lowerTemporalLTLToCore(getOperation());
@@ -289,24 +354,22 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addIllegalOp<verif::HasBeenResetOp>();
   target.addIllegalOp<ltl::PastOp>();
 
-  auto isLegal = [](Operation *op) {
-    auto hasNonAssertUsers = std::any_of(
-        op->getUsers().begin(), op->getUsers().end(), [](Operation *user) {
-          return !isa<verif::AssertOp, verif::ClockedAssertOp>(user);
-        });
-    auto hasIntegerResultTypes =
-        std::all_of(op->getResultTypes().begin(), op->getResultTypes().end(),
-                    [](Type type) { return isa<IntegerType>(type); });
-    // If there are users other than asserts, we can't map it to comb (unless
-    // the return type is already integer anyway)
-    if (hasNonAssertUsers && !hasIntegerResultTypes)
-      return true;
+  // Populate the set of convertible ops.
+  DenseSet<Operation *> convertible;
+  DenseSet<Operation *> visited;
+  getOperation().walk([&](Operation *op) {
+    if (visited.contains(op))
+      return;
+    // Discover the connected component of bool ops that this op belongs to.
+    DenseSet<Operation *> component;
+    bool canConvert = isLowerableBooleanComponent(op, component);
+    visited.insert(component.begin(), component.end());
+    // If the discovered component cannot be converted, discard
+    if (canConvert)
+      convertible.insert(component.begin(), component.end());
+  });
+  auto isLegal = [&](Operation *op) { return !convertible.contains(op); };
 
-    // Otherwise illegal if operands are i1
-    return std::any_of(
-        op->getOperands().begin(), op->getOperands().end(),
-        [](Value operand) { return !isa<IntegerType>(operand.getType()); });
-  };
   target.addDynamicallyLegalOp<ltl::ImplicationOp>(isLegal);
   target.addDynamicallyLegalOp<ltl::NotOp>(isLegal);
   target.addDynamicallyLegalOp<ltl::AndOp>(isLegal);
@@ -359,7 +422,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Clean up remaining unrealized casts by changing assert argument types
   getOperation().walk([&](Operation *op) {
-    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+    if (!isa<verif::AssertOp, verif::ClockedAssertOp, verif::AssumeOp,
+             verif::ClockedAssumeOp>(op))
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
