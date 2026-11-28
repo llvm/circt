@@ -90,9 +90,11 @@ static llvm::FailureOr<NPNClass> getNPNClassFromModule(hw::HWModuleOp module) {
 /// Simple technology library encoded as a HWModuleOp.
 struct TechLibraryPattern : public CutRewritePattern {
   TechLibraryPattern(hw::HWModuleOp module, double area,
-                     SmallVector<DelayType> delay, NPNClass npnClass)
+                     SmallVector<DelayType> delay,
+                     SmallVector<double> inputCaps, NPNClass npnClass)
       : CutRewritePattern(module->getContext()), area(area),
-        delay(std::move(delay)), module(module), npnClass(std::move(npnClass)) {
+        delay(std::move(delay)), inputCaps(std::move(inputCaps)),
+        module(module), npnClass(std::move(npnClass)) {
 
     LLVM_DEBUG({
       llvm::dbgs() << "Created Tech Library Pattern for module: "
@@ -170,6 +172,7 @@ struct TechLibraryPattern : public CutRewritePattern {
 private:
   const double area;
   const SmallVector<DelayType> delay;
+  const SmallVector<double> inputCaps;
   hw::HWModuleOp module;
   NPNClass npnClass;
 };
@@ -247,6 +250,14 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
         delay.push_back(static_cast<DelayType>(arc.getIntrinsic()));
       }
 
+      SmallVector<double> inputCaps(inputPorts.size(), 0.0);
+      if (auto inputCapsAttr = mappingCost.getInputCaps()) {
+        for (auto [index, port] : llvm::enumerate(inputPorts)) {
+          if (auto capAttr = inputCapsAttr.get(port.name))
+            inputCaps[index] = cast<FloatAttr>(capAttr).getValueAsDouble();
+        }
+      }
+
       // Compute NPN Class for the module.
       auto npnClass = getNPNClassFromModule(hwModule);
       if (failed(npnClass)) {
@@ -257,6 +268,7 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       // Create a CutRewritePattern for the library module
       std::unique_ptr<TechLibraryPattern> pattern =
           std::make_unique<TechLibraryPattern>(hwModule, area, std::move(delay),
+                                               std::move(inputCaps),
                                                std::move(*npnClass));
 
       // Update the maximum input size
